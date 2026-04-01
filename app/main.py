@@ -2,7 +2,7 @@
 FastAPI 应用工厂和配置。
 """
 
-import logging
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -16,7 +16,7 @@ from app.services.queue_service import initialize_queue
 from app.workers.trainer_worker import initialize_worker
 
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def initialize_directories() -> None:

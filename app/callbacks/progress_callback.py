@@ -4,7 +4,7 @@
 和日志文件。
 """
 
-import logging
+
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.db.crud import update_job_progress, get_job_by_id
 
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class CancelledError(RuntimeError):

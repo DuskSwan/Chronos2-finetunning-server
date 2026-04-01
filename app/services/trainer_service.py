@@ -3,7 +3,7 @@
 使用 Chronos-2 官方模型和微调接口执行真实的微调训练。
 """
 
-import logging
+
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional, Literal
@@ -14,7 +14,7 @@ from app.callbacks.progress_callback import ProgressCallback, CancelledError
 from app.services.dataset_service import prepare_input_data
 
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def train_chronos2(

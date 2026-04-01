@@ -4,7 +4,7 @@
 """
 
 import json
-import logging
+
 import threading
 import time
 from typing import Optional
@@ -23,7 +23,7 @@ from app.core.enums import JobStatus
 from app.core.config import Settings
 
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class TrainerWorker:
