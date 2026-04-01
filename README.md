@@ -1,93 +1,266 @@
-# ts_model_train_and_finetune
+# Chronos-2 Model Fine-tuning Service
 
+A FastAPI-based service for fine-tuning Amazon Chronos-2 time series forecasting models using LoRA or full fine-tuning modes.
 
+## Project Overview
 
-## Getting started
+This project provides a REST API to submit fine-tuning jobs for Chronos-2 models. In this first phase (Step 1), the service supports:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- **Job Creation**: Submit fine-tuning jobs with validated parameters
+- **Job Persistence**: Store job metadata in SQLite database
+- **Task Directory Management**: Automatically create output directories and save request manifests
+- **Health Checking**: Simple health check endpoint for service monitoring
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### Current Capabilities
 
-## Add your files
+This step implements the task submission and persistence layer only. It does **NOT** include:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+- Background training worker processes
+- Asynchronous training execution
+- Real Chronos-2 model training invocations
+- Job cancellation
+- Callback mechanisms
+- Job query endpoints (except health check)
 
-```
-cd existing_repo
-git remote add origin http://192.168.0.12/ai_agent/ts_model_train_and_finetune.git
-git branch -M main
-git push -uf origin main
-```
+## Requirements
 
-## Integrate with your tools
-
-- [ ] [Set up project integrations](http://192.168.0.12/ai_agent/ts_model_train_and_finetune/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- Python 3.11+
+- pip (or uv)
 
 ## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+
+### 1. Create Virtual Environment
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+### 2. Install Dependencies
+
+```bash
+pip install -e .
+# Or with dev dependencies for testing:
+pip install -e ".[dev]"
+```
 
 ## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Starting the Service
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+```bash
+# Using uvicorn directly
+uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+# Or using python -m
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+The service will start at `http://127.0.0.1:8000`.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Health Check
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Response:
+```json
+{
+  "status": "ok"
+}
+```
+
+### Create a Fine-tuning Job
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_id": "amazon/chronos-2",
+    "train_data_path": "/path/to/train.csv",
+    "val_data_path": "/path/to/val.csv",
+    "prediction_length": 96,
+    "context_length": 512,
+    "finetune_mode": "lora",
+    "learning_rate": 0.0001,
+    "num_steps": 1000,
+    "batch_size": 32,
+    "logging_steps": 100,
+    "finetuned_ckpt_name": "finetuned-ckpt",
+    "device": "cpu"
+  }'
+```
+
+Response:
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued"
+}
+```
+
+## Configuration
+
+Configuration is managed via environment variables or a `.env` file:
+
+```env
+# Server settings
+HOST=127.0.0.1
+PORT=8000
+
+# Database
+SQLITE_DB_PATH=./data/finetune.db
+
+# Paths
+ARTIFACTS_ROOT=./artifacts
+LOGS_ROOT=./logs
+
+# Model
+DEFAULT_MODEL_ID=amazon/chronos-2
+```
+
+## Directory Structure
+
+```
+ts_model_train_and_finetune/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPI application factory
+│   ├── api/                 # API routes
+│   │   ├── __init__.py
+│   │   ├── health.py        # Health check endpoint
+│   │   └── finetune.py      # Job creation endpoint
+│   ├── core/                # Core configurations
+│   │   ├── __init__.py
+│   │   ├── config.py        # Settings management
+│   │   ├── paths.py         # Path utilities
+│   │   └── enums.py         # Status enumerations
+│   ├── db/                  # Database layer
+│   │   ├── __init__.py
+│   │   ├── session.py       # SQLAlchemy session setup
+│   │   ├── models.py        # ORM models
+│   │   ├── crud.py          # CRUD operations
+│   │   └── init_db.py       # Database initialization
+│   └── schemas/             # Pydantic schemas
+│       ├── __init__.py
+│       ├── request.py       # Request schemas
+│       └── response.py      # Response schemas
+├── tests/
+│   └── test_create_job.py   # Job creation tests
+├── pyproject.toml
+├── README.md
+└── .gitignore
+```
+
+## Database Schema
+
+The `finetune_jobs` table stores job metadata with the following fields:
+
+| Field | Type | Nullable | Default |
+|-------|------|----------|---------|
+| id | VARCHAR(36) | No | - |
+| status | VARCHAR(20) | No | "queued" |
+| request_json | TEXT | No | - |
+| created_at | DATETIME | No | Now |
+| started_at | DATETIME | Yes | NULL |
+| finished_at | DATETIME | Yes | NULL |
+| output_dir | VARCHAR(512) | No | - |
+| log_path | VARCHAR(512) | No | - |
+| model_path | VARCHAR(512) | Yes | NULL |
+| error_message | TEXT | Yes | NULL |
+| current_step | INTEGER | No | 0 |
+| max_steps | INTEGER | No | 0 |
+| last_loss | FLOAT | Yes | NULL |
+| cancel_requested | BOOLEAN | No | False |
+
+## API Endpoints
+
+### GET /health
+
+Health check endpoint.
+
+**Response 200:**
+```json
+{
+  "status": "ok"
+}
+```
+
+### POST /v1/finetune/jobs
+
+Create a new fine-tuning job.
+
+**Request Body:**
+
+| Field | Type | Default | Required | Notes |
+|-------|------|---------|----------|-------|
+| model_id | string | amazon/chronos-2 | No | - |
+| train_data_path | string | - | Yes | Path to training data |
+| val_data_path | string | null | No | Path to validation data |
+| prediction_length | integer | - | Yes | Must be positive |
+| context_length | integer | 512 | No | Must be positive |
+| finetune_mode | string | lora | No | "lora" or "full" |
+| learning_rate | float | 0.0001 | No | Must be positive |
+| num_steps | integer | 1000 | No | Must be positive |
+| batch_size | integer | 32 | No | Must be positive |
+| logging_steps | integer | 100 | No | Must be positive |
+| output_root | string | null | No | Uses artifacts_root if null |
+| finetuned_ckpt_name | string | finetuned-ckpt | No | - |
+| device | string | cpu | No | "cpu" or "cuda" |
+
+**Response 201:**
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued"
+}
+```
+
+**Request Validation:**
+- `train_data_path`: Required, non-empty string
+- `prediction_length`: Required, positive integer
+- `context_length`: Positive integer
+- `num_steps`: Positive integer
+- `batch_size`: Positive integer
+- `logging_steps`: Positive integer
+- `learning_rate`: Positive float
+- `finetune_mode`: One of "lora" or "full"
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest tests/
+```
+
+Run tests with coverage:
+
+```bash
+pytest tests/ --cov=app
+```
+
+Run specific test:
+
+```bash
+pytest tests/test_create_job.py::test_create_finetune_job_success -v
+```
+
+## Project Structure Notes
+
+- **Simple Design**: Minimal abstractions, straightforward implementations
+- **Type Hints**: All Python code includes type annotations for better IDE support and maintainability
+- **Path Handling**: Uses `pathlib.Path` exclusively for cross-platform compatibility
+- **No Training Logic**: This step focuses solely on API and persistence layers
+
+## Next Steps (Future Phases)
+
+- Phase 2: Implement background worker and async training execution
+- Phase 3: Add job query and cancellation endpoints
+- Phase 4: Implement real Chronos-2 model training
+- Phase 5: Add callback mechanisms and monitoring
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Internal project for model fine-tuning research.
