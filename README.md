@@ -4,13 +4,14 @@
 
 ## 项目概览
 
-本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。当前进度（第 2 步）支持：
+本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。当前进度（第 3 步）已接入真实的 Chronos-2 微调，支持：
 
 - **任务创建**：提交经过参数验证的微调任务
 - **任务持久化**：在 SQLite 数据库中存储任务元数据
 - **任务目录管理**：自动创建输出目录并保存请求清单
 - **后台异步训练**：后台 worker 自动消费任务队列
-- **任务进度跟踪**：实时更新训练步数、损失等信息
+- **真实 Chronos-2 微调**：使用官方 Chronos-2 库进行实际的模型微调
+- **进度跟踪与 Callback**：通过自定义 callback 在训练过程中实时更新进度
 - **健康检查**：简单的健康检查端点用于服务监控
 
 ### 当前功能
@@ -19,21 +20,25 @@
 
 - ✅ 后台异步任务队列（本地内存队列）
 - ✅ 后台 worker 线程（串行处理任务）
-- ✅ 假训练器（5步模拟训练，每步0.2~0.5秒）
+- ✅ **真实 Chronos-2 微调**（官方 `fit()` 接口）
+- ✅ **自定义 callback 机制**（训练过程中更新数据库和日志）
+- ✅ 数据集加载（支持 CSV 和 Parquet 格式）
 - ✅ 任务状态流转（queued → running → completed/failed）
 - ✅ 进度跟踪（current_step, max_steps, last_loss）
+- ✅ CPU/CUDA 自动设备检测
 
 **暂未实现/计划中**：
 
-- 真实 Chronos-2 模型训练调用
+- 分布式训练（多GPU）
 - 任务取消功能
-- 回调（callback）机制
-- 查询接口大幅扩充
+- 任务查询接口的大幅扩展
 - 分布式 worker（当前为单线程）
+- 高级数据预处理和特征工程
+- 模型评估和验证指标
 
 ### 技术架构
 
-```
+```text
 HTTP 请求
     ↓
 FastAPI 路由 (POST /v1/finetune/jobs)
@@ -42,17 +47,22 @@ FastAPI 路由 (POST /v1/finetune/jobs)
     ↓
 后台 Worker 线程
     ↓
-轮询队列 → 消费任务 → 假训练 → 更新状态
+轮询队列 → 消费任务 → 加载数据 → Chronos-2 fit()
+    ↓
+Callback 更新进度 → 保存模型 → 更新状态
 ```
 
 - **任务队列**：基于 Python 标准库 `queue.Queue`（易后续扩展为 RabbitMQ/Redis）
 - **数据库**：SQLite + SQLAlchemy ORM
 - **API 框架**：FastAPI + Uvicorn
+- **模型库**：chronos-forecasting 2.1.0
+- **数据处理**：Pandas + PyArrow
 
 ## 需求
 
 - Python 3.11+
 - pip (或 uv)
+- PyTorch（自动作为 chronos-forecasting 依赖安装）
 
 ## 安装
 
@@ -71,6 +81,9 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
+> **注意**：首次安装时，chronos-forecasting 和 PyTorch 的下载和安装可能需要几分钟到十几分钟，
+> 取决于网络速度和机器配置。
+
 ## 使用方法
 
 ### 启动服务
@@ -84,6 +97,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 服务启动时会自动：
+
 1. 初始化 SQLite 数据库
 2. 创建必要目录（artifacts, logs）
 3. 启动后台 worker 线程
@@ -104,6 +118,19 @@ curl http://127.0.0.1:8000/health
 
 ### 创建微调任务
 
+最小请求示例（仅需 train_data_path 和 prediction_length）：
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "train_data_path": "/path/to/train.csv",
+    "prediction_length": 96
+  }'
+```
+
+完整请求示例（包含所有可选参数）：
+
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
   -H "Content-Type: application/json" \
@@ -118,38 +145,101 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
     "num_steps": 1000,
     "batch_size": 32,
     "logging_steps": 100,
+    "output_root": "/custom/path",
     "finetuned_ckpt_name": "finetuned-ckpt",
     "device": "cpu"
   }'
 ```
 
-响应（立即返回，不等待训练完成）：
+响应（立即返回，同步返回 job_id 和状态）：
 
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued"
+  "status": "queued",
+  "created_at": "2024-01-01T12:00:00Z"
 }
 ```
+
+**参数说明**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `model_id` | str | "amazon/chronos-2" | 微调的基础模型 ID |
+| `train_data_path` | str | **必需** | 训练数据文件路径（CSV 或 Parquet） |
+| `val_data_path` | str \| null | null | 验证数据文件路径（可选） |
+| `prediction_length` | int | **必需** | 预测长度（时间步） |
+| `context_length` | int | 512 | 上下文长度（输入时间步） |
+| `finetune_mode` | str | "lora" | 微调模式：`"lora"` 或 `"full"` |
+| `learning_rate` | float | 1e-4 | 学习率 |
+| `num_steps` | int | 1000 | 训练总步数 |
+| `batch_size` | int | 32 | 批处理大小 |
+| `logging_steps` | int | 100 | 日志间隔（步） |
+| `output_root` | str \| null | null | 输出根目录（default: `./artifacts`） |
+| `finetuned_ckpt_name` | str | "finetuned-ckpt" | 微调模型保存名称 |
+| `device` | str | "cpu" | 设备：`"cpu"` 或 `"cuda"`（自动检测） |
 
 **任务状态说明**：
 
 - `queued`: 任务已创建，等待 worker 消费
-- `running`: 后台 worker 正在训练
+- `running`: 后台 worker 正在执行 Chronos-2 微调
 - `completed`: 训练成功完成
 - `failed`: 训练过程中出现错误
 - `cancelled`: 任务已取消（暂未实现）
 
-### 查询任务状态（调试用）
+### 支持的数据格式
 
-当前版本暂不支持直接的查询接口，但可以通过检查数据库或日志目录来了解任务状态：
+#### CSV 格式
+
+最小字段（列）：
+
+```csv
+item_id,timestamp,target
+item1,2024-01-01,100.5
+item1,2024-01-02,101.3
+item2,2024-01-01,200.1
+item2,2024-01-02,202.5
+...
+```
+
+- `item_id`: 时序标识符（同一 item 的数据点会视为一个连续时序）
+- `timestamp`: 时间戳（按此排序，格式任意但要能被 Pandas 识别）
+- `target`: 目标值（预测对象）
+
+> 当前版本使用硬编码的列名，后续版本可支持自定义列名。
+
+#### Parquet 格式
+
+与 CSV 相同的列结构。Pandas 会自动解析 Parquet 文件。
+
+### 查询任务状态
+
+当前版本暂不支持直接的查询接口，但可以通过以下方式了解任务状态：
 
 ```bash
-# 检查数据库中的任务信息
-sqlite3 ./data/finetune.db "SELECT id, status, started_at, finished_at FROM finetune_jobs;"
+# 1. 查看数据库中的任务信息
+sqlite3 ./data/finetune.db "SELECT id, status, started_at, finished_at, model_path FROM finetune_jobs;"
 
-# 查看训练日志
+# 2. 查看训练日志（实时）
 tail -f ./artifacts/<job_id>/train.log
+
+# 3. 检查输出目录
+ls -la ./artifacts/<job_id>/
+```
+
+### 任务目录结构
+
+任务创建后，会在 `artifacts/` 下生成以下结构：
+
+```
+artifacts/
+└── <job_id>/
+    ├── request.json          # 保存的请求参数
+    ├── train.log             # 训练日志（实时写入）
+    └── finetuned-ckpt/       # 微调后的模型（训练完成后）
+        ├── model.pt
+        ├── config.json
+        └── ...
 ```
 
 ## 配置
@@ -174,7 +264,7 @@ DEFAULT_MODEL_ID=amazon/chronos-2
 
 ## 目录结构
 
-```bash
+```text
 ts_model_train_and_finetune/
 ├── app/
 │   ├── __init__.py
@@ -183,6 +273,9 @@ ts_model_train_and_finetune/
 │   │   ├── __init__.py
 │   │   ├── health.py        # 健康检查端点
 │   │   └── finetune.py      # 任务创建端点
+│   ├── callbacks/           # 回调机制（新）
+│   │   ├── __init__.py
+│   │   └── progress_callback.py  # 训练进度回调
 │   ├── core/                # 核心配置
 │   │   ├── __init__.py
 │   │   ├── config.py        # 设置管理
@@ -198,59 +291,55 @@ ts_model_train_and_finetune/
 │   │   ├── __init__.py
 │   │   ├── request.py       # 请求 schema
 │   │   └── response.py      # 响应 schema
-│   ├── services/            # 业务逻辑层（新）
+│   ├── services/            # 业务逻辑层
 │   │   ├── __init__.py
 │   │   ├── queue_service.py # 任务队列管理
 │   │   ├── job_service.py   # 任务业务逻辑
-│   │   └── trainer_service.py # 假训练器
-│   └── workers/             # 后台 worker（新）
+│   │   ├── trainer_service.py # 真实 Chronos-2 微调
+│   │   └── dataset_service.py # 数据集加载与转换
+│   └── workers/             # 后台 worker
 │       ├── __init__.py
 │       └── trainer_worker.py # 训练 worker 线程
 │
 ├── tests/
 │   ├── __init__.py
-│   ├── test_create_job.py    # 第 1 步测试
-│   └── test_worker_flow.py   # 第 2 步测试（新）
+│   ├── test_create_job.py    # 第 1 步测试（任务创建）
+│   ├── test_worker_flow.py   # 第 2 步测试（异步工作流）
+│   └── test_trainer_service.py # 第 3 步测试（真实训练）
 │
 ├── pyproject.toml
 ├── README.md
 └── .gitignore
 ```
-├── tests/
-│   └── test_create_job.py   # 任务创建测试
-├── pyproject.toml
-├── README.md
-└── .gitignore
-```
 
-## Database Schema
+## 数据库架构
 
-The `finetune_jobs` table stores job metadata with the following fields:
+`finetune_jobs` 表存储任务元数据，字段如下：
 
-| Field | Type | Nullable | Default |
-| ----- | ---- | -------- | ------- |
-| id | VARCHAR(36) | No | - |
-| status | VARCHAR(20) | No | "queued" |
-| request_json | TEXT | No | - |
-| created_at | DATETIME | No | Now |
-| started_at | DATETIME | Yes | NULL |
-| finished_at | DATETIME | Yes | NULL |
-| output_dir | VARCHAR(512) | No | - |
-| log_path | VARCHAR(512) | No | - |
-| model_path | VARCHAR(512) | Yes | NULL |
-| error_message | TEXT | Yes | NULL |
-| current_step | INTEGER | No | 0 |
-| max_steps | INTEGER | No | 0 |
-| last_loss | FLOAT | Yes | NULL |
-| cancel_requested | BOOLEAN | No | False |
+| 字段 | 类型 | 可空 | 默认值 |
+|------|------|------|--------|
+| id | VARCHAR(36) | 否 | - |
+| status | VARCHAR(20) | 否 | "queued" |
+| request_json | TEXT | 否 | - |
+| created_at | DATETIME | 否 | 当前时间 |
+| started_at | DATETIME | 是 | NULL |
+| finished_at | DATETIME | 是 | NULL |
+| output_dir | VARCHAR(512) | 否 | - |
+| log_path | VARCHAR(512) | 否 | - |
+| model_path | VARCHAR(512) | 是 | NULL |
+| error_message | TEXT | 是 | NULL |
+| current_step | INTEGER | 否 | 0 |
+| max_steps | INTEGER | 否 | 0 |
+| last_loss | FLOAT | 是 | NULL |
+| cancel_requested | BOOLEAN | 否 | False |
 
-## API Endpoints
+## API 端点
 
 ### GET /health
 
-Health check endpoint.
+健康检查端点。返回服务状态。
 
-**Response 200:**
+**响应 200：**
 
 ```json
 {
@@ -260,80 +349,109 @@ Health check endpoint.
 
 ### POST /v1/finetune/jobs
 
-Create a new fine-tuning job.
+创建新的微调任务。
 
-**Request Body:**
+**请求体参数：**
 
-| Field | Type | Default | Required | Notes |
-| ----- | ---- | ------- | -------- | ----- |
-| model_id | string | amazon/chronos-2 | No | - |
-| train_data_path | string | - | Yes | Path to training data |
-| val_data_path | string | null | No | Path to validation data |
-| prediction_length | integer | - | Yes | Must be positive |
-| context_length | integer | 512 | No | Must be positive |
-| finetune_mode | string | lora | No | "lora" or "full" |
-| learning_rate | float | 0.0001 | No | Must be positive |
-| num_steps | integer | 1000 | No | Must be positive |
-| batch_size | integer | 32 | No | Must be positive |
-| logging_steps | integer | 100 | No | Must be positive |
-| output_root | string | null | No | Uses artifacts_root if null |
-| finetuned_ckpt_name | string | finetuned-ckpt | No | - |
-| device | string | cpu | No | "cpu" or "cuda" |
+| 字段 | 类型 | 默认值 | 必需 | 说明 |
+|------|------|--------|------|------|
+| model_id | str | amazon/chronos-2 | 否 | 模型 ID |
+| train_data_path | str | - | **是** | 训练数据路径 |
+| val_data_path | str | null | 否 | 验证数据路径 |
+| prediction_length | int | - | **是** | 预测长度（必须为正整数） |
+| context_length | int | 512 | 否 | 上下文长度（必须为正整数） |
+| finetune_mode | str | lora | 否 | 微调模式："lora" 或 "full" |
+| learning_rate | float | 0.0001 | 否 | 学习率（必须为正浮点数） |
+| num_steps | int | 1000 | 否 | 训练总步数（必须为正整数） |
+| batch_size | int | 32 | 否 | 批处理大小（必须为正整数） |
+| logging_steps | int | 100 | 否 | 日志间隔（必须为正整数） |
+| output_root | str | null | 否 | 输出根目录（为空则使用 artifacts 目录） |
+| finetuned_ckpt_name | str | finetuned-ckpt | 否 | 微调模型保存名称 |
+| device | str | cpu | 否 | 设备："cpu" 或 "cuda" |
 
-**Response 201:**
+**响应 201：**
 
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued"
+  "status": "queued",
+  "created_at": "2024-01-01T12:00:00Z"
 }
 ```
 
-**Request Validation:**
+## 测试
 
-- `train_data_path`: Required, non-empty string
-- `prediction_length`: Required, positive integer
-- `context_length`: Positive integer
-- `num_steps`: Positive integer
-- `batch_size`: Positive integer
-- `logging_steps`: Positive integer
-- `learning_rate`: Positive float
-- `finetune_mode`: One of "lora" or "full"
-
-## Testing
-
-Run the test suite:
+运行完整测试套件：
 
 ```bash
-pytest tests/
+pytest tests/ -v
 ```
 
-Run tests with coverage:
+运行指定测试模块：
+
+```bash
+# 第 1 步：任务创建接口
+pytest tests/test_create_job.py -v
+
+# 第 2 步：异步工作流
+pytest tests/test_worker_flow.py -v
+
+# 第 3 步：真实训练（含 mock）
+pytest tests/test_trainer_service.py -v
+```
+
+带覆盖率的测试：
 
 ```bash
 pytest tests/ --cov=app
 ```
 
-Run specific test:
+运行特定测试：
 
 ```bash
 pytest tests/test_create_job.py::test_create_finetune_job_success -v
 ```
 
-## Project Structure Notes
+## 项目设计说明
 
-- **Simple Design**: Minimal abstractions, straightforward implementations
-- **Type Hints**: All Python code includes type annotations for better IDE support and maintainability
-- **Path Handling**: Uses `pathlib.Path` exclusively for cross-platform compatibility
-- **No Training Logic**: This step focuses solely on API and persistence layers
+- **简洁设计**：最小化抽象，直接的实现
+- **类型注解**：所有 Python 代码都包含类型注解，便于 IDE 支持和代码维护
+- **路径处理**：全部使用 `pathlib.Path` 确保跨平台兼容性
+- **真实训练**：使用官方 Chronos-2 `fit()` 接口进行实际的模型微调
+- **Callback 机制**：自定义 callback 在训练过程中实时更新数据库和日志
 
-## Next Steps (Future Phases)
+## 项目进度
 
-- Phase 2: Implement background worker and async training execution
-- Phase 3: Add job query and cancellation endpoints
-- Phase 4: Implement real Chronos-2 model training
-- Phase 5: Add callback mechanisms and monitoring
+**第 1 步（已完成）**：创建任务接口，仅入库，不启动训练
+- ✅ 参数校验
+- ✅ 数据库入库
+- ✅ 产物目录管理
+- ✅ 返回 job_id
 
-## License
+**第 2 步（已完成）**：异步训练过程（使用假训练器）
+- ✅ 本地内存队列
+- ✅ 后台 worker 线程
+- ✅ 任务自动入队和消费
+- ✅ 状态流转（queued → running → completed/failed）
+- ✅ 进度跟踪
 
-Internal project for model fine-tuning research.
+**第 3 步（已完成）**：接入真实 Chronos-2 微调并实现 callback
+- ✅ 真实模型加载和微调
+- ✅ 数据集格式支持（CSV/Parquet）
+- ✅ 自定义 callback 机制
+- ✅ 进度实时更新
+- ✅ 模型保存
+
+**第 4 步（规划中）**：任务查询和取消接口
+- ⏳ 任务查询端点
+- ⏳ 任务取消接口
+- ⏳ 进度流式查询
+
+**第 5 步（规划中）**：分布式和性能优化
+- ⏳ 多 GPU 训练支持
+- ⏳ 分布式 worker
+- ⏳ 模型评估和验证指标
+
+## 许可证
+
+内部项目，仅供模型微调研究使用。

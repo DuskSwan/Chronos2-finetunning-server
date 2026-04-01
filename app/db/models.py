@@ -2,7 +2,7 @@
 微调任务的 SQLAlchemy 模型。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import Column, DateTime, Float, Integer, String, Boolean, Text
@@ -19,7 +19,7 @@ class FinetuneJob(Base):
     id: str = Column(String(36), primary_key=True)
     status: str = Column(String(20), nullable=False, default="queued")
     request_json: str = Column(Text, nullable=False)
-    created_at: datetime = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at: datetime = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Column(DateTime, nullable=True)
     finished_at: Optional[datetime] = Column(DateTime, nullable=True)
     output_dir: str = Column(String(512), nullable=False)
