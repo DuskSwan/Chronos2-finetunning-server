@@ -16,6 +16,7 @@ from app.db.crud import create_job
 from app.db.session import get_db
 from app.schemas.request import CreateFinetuneJobRequest
 from app.schemas.response import CreateFinetuneJobResponse
+from app.services.queue_service import get_job_queue
 
 router = APIRouter(prefix="/v1/finetune", tags=["finetune"])
 
@@ -104,7 +105,7 @@ async def create_finetune_job(
     """
     创建新的微调任务。
     
-    任务在数据库中排队但不启动。
+    任务在数据库中排队后，会自动被后台 worker 消费。
     
     参数：
         request: 微调任务请求
@@ -145,11 +146,15 @@ async def create_finetune_job(
         db=db,
         job_id=job_id,
         status=JobStatus.queued.value,
-        request_data=validated_params,
+        request_json=json.dumps(validated_params),
         output_dir=str(job_output_dir),
         log_path=str(log_path),
         max_steps=validated_params["num_steps"],
     )
+    
+    # 将任务入队，worker 会自动处理
+    queue = get_job_queue()
+    queue.enqueue(job_id)
     
     return CreateFinetuneJobResponse(
         job_id=job_id,

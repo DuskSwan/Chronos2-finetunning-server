@@ -4,23 +4,50 @@
 
 ## 项目概览
 
-本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。在第一阶段（步骤 1），服务支持：
+本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。当前进度（第 2 步）支持：
 
 - **任务创建**：提交经过参数验证的微调任务
 - **任务持久化**：在 SQLite 数据库中存储任务元数据
 - **任务目录管理**：自动创建输出目录并保存请求清单
+- **后台异步训练**：后台 worker 自动消费任务队列
+- **任务进度跟踪**：实时更新训练步数、损失等信息
 - **健康检查**：简单的健康检查端点用于服务监控
 
 ### 当前功能
 
-本步骤仅实现任务提交和持久化层。**不包含**：
+**已实现**：
 
-- 后台训练 worker 进程
-- 异步训练执行
-- 真实的 Chronos-2 模型训练调用
+- ✅ 后台异步任务队列（本地内存队列）
+- ✅ 后台 worker 线程（串行处理任务）
+- ✅ 假训练器（5步模拟训练，每步0.2~0.5秒）
+- ✅ 任务状态流转（queued → running → completed/failed）
+- ✅ 进度跟踪（current_step, max_steps, last_loss）
+
+**暂未实现/计划中**：
+
+- 真实 Chronos-2 模型训练调用
 - 任务取消功能
-- 回调机制
-- 任务查询端点（除了健康检查）
+- 回调（callback）机制
+- 查询接口大幅扩充
+- 分布式 worker（当前为单线程）
+
+### 技术架构
+
+```
+HTTP 请求
+    ↓
+FastAPI 路由 (POST /v1/finetune/jobs)
+    ↓
+参数验证 → 数据库入库 → 加入队列
+    ↓
+后台 Worker 线程
+    ↓
+轮询队列 → 消费任务 → 假训练 → 更新状态
+```
+
+- **任务队列**：基于 Python 标准库 `queue.Queue`（易后续扩展为 RabbitMQ/Redis）
+- **数据库**：SQLite + SQLAlchemy ORM
+- **API 框架**：FastAPI + Uvicorn
 
 ## 需求
 
@@ -56,7 +83,10 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-服务将在 `http://127.0.0.1:8000` 启动。
+服务启动时会自动：
+1. 初始化 SQLite 数据库
+2. 创建必要目录（artifacts, logs）
+3. 启动后台 worker 线程
 
 ### 健康检查
 
@@ -93,13 +123,33 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
   }'
 ```
 
-响应：
+响应（立即返回，不等待训练完成）：
 
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "queued"
 }
+```
+
+**任务状态说明**：
+
+- `queued`: 任务已创建，等待 worker 消费
+- `running`: 后台 worker 正在训练
+- `completed`: 训练成功完成
+- `failed`: 训练过程中出现错误
+- `cancelled`: 任务已取消（暂未实现）
+
+### 查询任务状态（调试用）
+
+当前版本暂不支持直接的查询接口，但可以通过检查数据库或日志目录来了解任务状态：
+
+```bash
+# 检查数据库中的任务信息
+sqlite3 ./data/finetune.db "SELECT id, status, started_at, finished_at FROM finetune_jobs;"
+
+# 查看训练日志
+tail -f ./artifacts/<job_id>/train.log
 ```
 
 ## 配置
@@ -128,7 +178,7 @@ DEFAULT_MODEL_ID=amazon/chronos-2
 ts_model_train_and_finetune/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPI 应用工厂
+│   ├── main.py              # FastAPI 应用工厂 + 生命周期管理
 │   ├── api/                 # API 路由
 │   │   ├── __init__.py
 │   │   ├── health.py        # 健康检查端点
@@ -144,10 +194,28 @@ ts_model_train_and_finetune/
 │   │   ├── models.py        # ORM 模型
 │   │   ├── crud.py          # CRUD 操作
 │   │   └── init_db.py       # 数据库初始化
-│   └── schemas/             # Pydantic schemas
+│   ├── schemas/             # Pydantic schemas
+│   │   ├── __init__.py
+│   │   ├── request.py       # 请求 schema
+│   │   └── response.py      # 响应 schema
+│   ├── services/            # 业务逻辑层（新）
+│   │   ├── __init__.py
+│   │   ├── queue_service.py # 任务队列管理
+│   │   ├── job_service.py   # 任务业务逻辑
+│   │   └── trainer_service.py # 假训练器
+│   └── workers/             # 后台 worker（新）
 │       ├── __init__.py
-│       ├── request.py       # 请求 schema
-│       └── response.py      # 响应 schema
+│       └── trainer_worker.py # 训练 worker 线程
+│
+├── tests/
+│   ├── __init__.py
+│   ├── test_create_job.py    # 第 1 步测试
+│   └── test_worker_flow.py   # 第 2 步测试（新）
+│
+├── pyproject.toml
+├── README.md
+└── .gitignore
+```
 ├── tests/
 │   └── test_create_job.py   # 任务创建测试
 ├── pyproject.toml
