@@ -15,11 +15,7 @@ from app.db.models import Base, FinetuneJob
 from app.db.crud import create_job, get_job_by_id, update_job_progress
 from app.callbacks.progress_callback import ProgressCallback
 from app.services.trainer_service import train_chronos2, mock_train
-from app.services.dataset_service import (
-    prepare_training_data,
-    prepare_validation_data,
-    validate_required_columns,
-)
+from app.services.dataset_service import prepare_input_data, load_data
 
 
 @pytest.fixture
@@ -70,30 +66,17 @@ item2,2024-01-03,201.2
 class TestDatasetService:
     """数据集服务的测试。"""
 
-    def test_prepare_training_data_csv(self, sample_csv_data):
-        """测试从 CSV 加载训练数据。"""
-        data = prepare_training_data(sample_csv_data)
+    def test_prepare_input_data_csv(self, sample_csv_data):
+        """测试从 CSV 加载训练数据并转换为 3D 数组。"""
+        data = prepare_input_data(sample_csv_data, target_columns=["target"])
         
-        assert "target" in data
-        assert len(data["target"]) == 2  # 两个 item
-        assert len(data["target"][0]) == 3  # 每个 item 三个数据点
-        assert data["target"][0] == [100.5, 101.3, 99.8]
-        assert data["target"][1] == [200.1, 202.5, 201.2]
+        assert data.shape == (1, 1, 6)
+        assert data[0, 0].tolist() == [100.5, 101.3, 99.8, 200.1, 202.5, 201.2]
 
-    def test_prepare_validation_data_none(self):
-        """测试验证数据为 None 的情况。"""
-        result = prepare_validation_data(None)
-        assert result is None
-
-    def test_validate_required_columns_missing(self, sample_csv_data):
-        """测试缺少必需列时的错误。"""
-        import pandas as pd
-        
-        df = pd.read_csv(sample_csv_data)
-        df_missing = df.drop("target", axis=1)
-        
-        with pytest.raises(ValueError, match="缺少必需列"):
-            validate_required_columns(df_missing)
+    def test_load_data_missing_columns(self, sample_csv_data):
+        """测试缺少目标列时的错误。"""
+        with pytest.raises(ValueError, match="缺少目标列"):
+            load_data(sample_csv_data, target_columns=["missing_col"])
 
 
 class TestProgressCallback:
@@ -163,14 +146,12 @@ class TestTrainerService:
         
         assert model_path == str(tmp_path / "finetuned-ckpt")
 
-    @patch("app.services.trainer_service.prepare_training_data")
-    @patch("app.services.trainer_service.prepare_validation_data")
+    @patch("app.services.trainer_service.prepare_input_data")
     @patch("chronos.ChronosPipeline")
     def test_train_chronos2_success(
         self,
         mock_pipeline_class,
-        mock_prepare_val,
-        mock_prepare_train,
+        mock_prepare_input,
         temp_db,
         tmp_path,
     ):
@@ -192,10 +173,8 @@ class TestTrainerService:
         )
         
         # Mock 数据准备
-        mock_prepare_train.return_value = {
-            "target": [[1, 2, 3, 4, 5]],
-        }
-        mock_prepare_val.return_value = None
+        import numpy as np
+        mock_prepare_input.return_value = np.zeros((1, 1, 5))
         
         # Mock 模型
         mock_pipeline = MagicMock()
@@ -220,12 +199,12 @@ class TestTrainerService:
         assert result.endswith("finetuned-ckpt")
         
         # 验证数据准备调用
-        mock_prepare_train.assert_called_once()
+        mock_prepare_input.assert_called_once()
 
-    @patch("app.services.trainer_service.prepare_training_data")
+    @patch("app.services.trainer_service.prepare_input_data")
     def test_train_chronos2_data_not_found(
         self,
-        mock_prepare_train,
+        mock_prepare_input,
         temp_db,
         tmp_path,
     ):
@@ -234,7 +213,7 @@ class TestTrainerService:
         job_id = "test-job-4"
         
         # Mock 数据加载失败
-        mock_prepare_train.side_effect = FileNotFoundError("数据文件不存在")
+        mock_prepare_input.side_effect = FileNotFoundError("数据文件不存在")
         
         create_job(
             db,

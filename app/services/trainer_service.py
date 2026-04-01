@@ -6,15 +6,12 @@
 import logging
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Literal
 
 from sqlalchemy.orm import Session
 
 from app.callbacks.progress_callback import ProgressCallback, CancelledError
-from app.services.dataset_service import (
-    prepare_training_data,
-    prepare_validation_data,
-)
+from app.services.dataset_service import prepare_input_data
 
 
 logger = logging.getLogger(__name__)
@@ -30,13 +27,14 @@ def train_chronos2(
     model_id: str = "amazon/chronos-2",
     prediction_length: int = 96,
     context_length: int = 512,
-    finetune_mode: str = "lora",
+    finetune_mode: Literal['full', 'lora'] = "lora",
     learning_rate: float = 1e-4,
     num_steps: int = 1000,
     batch_size: int = 32,
     logging_steps: int = 100,
     finetuned_ckpt_name: str = "finetuned-ckpt",
     device: str = "cpu",
+    selected_columns: Optional[list[str]] = None,
     **kwargs: Any
 ) -> str:
     """使用 Chronos-2 微调训练模型。
@@ -61,6 +59,7 @@ def train_chronos2(
         logging_steps: 日志间隔（默认 100）。
         finetuned_ckpt_name: 微调检查点名称。
         device: 设备（"cpu" 或 "cuda"，默认 "cpu"）。
+        selected_columns: 指定 CSV/Parquet 中要使用的列名列表。
         **kwargs: 其他参数。
 
     Returns:
@@ -97,8 +96,11 @@ def train_chronos2(
         callback._write_log(f"加载训练数据: {train_data_path}")
         callback.check_cancel_requested()
 
-        train_inputs = prepare_training_data(train_data_path)
-        logger.info(f"训练数据准备完成: {len(train_inputs['target'])} 个时序")
+        train_inputs = prepare_input_data(
+            train_data_path,
+            target_columns=selected_columns,
+        )
+        logger.info(f"训练数据准备完成: shape={train_inputs.shape}")
 
         # 2. 准备验证数据
         validation_inputs = None
@@ -106,11 +108,12 @@ def train_chronos2(
             logger.info(f"加载验证数据: {val_data_path}")
             callback._write_log(f"加载验证数据: {val_data_path}")
             callback.check_cancel_requested()
-            validation_inputs = prepare_validation_data(val_data_path)
-            if validation_inputs:
-                logger.info(
-                    f"验证数据准备完成: {len(validation_inputs['target'])} 个时序"
-                )
+            validation_inputs = prepare_input_data(
+                val_data_path,
+                target_columns=selected_columns,
+            )
+            if validation_inputs is not None:
+                logger.info(f"验证数据准备完成: shape={validation_inputs.shape}")
 
         # 3. 确定设备
         if "cuda" in device.lower():
@@ -137,10 +140,10 @@ def train_chronos2(
         callback._write_log(f"加载模型: {model_id}")
         callback.check_cancel_requested()
 
-        from chronos import ChronosPipeline
+        from chronos import BaseChronosPipeline, Chronos2Pipeline
 
         # 使用上下文管理器自动处理设备
-        pipeline = ChronosPipeline.from_pretrained(
+        pipeline: Chronos2Pipeline = BaseChronosPipeline.from_pretrained(
             model_id,
             device_map=use_device,
             torch_dtype="float32",
