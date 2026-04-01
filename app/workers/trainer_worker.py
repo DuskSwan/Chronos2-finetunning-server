@@ -130,7 +130,10 @@ class TrainerWorker:
                 # 检查取消请求
                 db.expire_all()
                 job = get_job_by_id(db, job_id)
-                if job and job.cancel_requested:
+                if job is None:
+                    logger.error(f"任务 {job_id} 在训练过程中丢失")
+                    return
+                if job.cancel_requested:
                     mark_job_cancelled(db, job_id)
                     logger.info(f"任务 {job_id} 检测到取消请求，已取消")
                     return

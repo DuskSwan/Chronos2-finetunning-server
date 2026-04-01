@@ -111,6 +111,7 @@ class TestProgressCallback:
         
         # 验证数据库更新
         job = get_job_by_id(db, job_id)
+        assert job is not None
         assert job.current_step == 10
         assert job.last_loss == 0.5
 

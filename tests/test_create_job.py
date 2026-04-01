@@ -243,6 +243,7 @@ def test_create_finetune_job_default_values(client, test_db_session):
     job = get_job_by_id(test_db_session, job_id)
     
     # Check database defaults
+    assert job is not None
     assert job.max_steps == 1000  # Default num_steps
     assert job.current_step == 0
     assert job.cancel_requested is False
