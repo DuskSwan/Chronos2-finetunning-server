@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional
 import json
 from datetime import datetime, timezone
 
+from fastapi import HTTPException, status
+
 from app.db.crud import (
     create_job,
     get_job_by_id,
@@ -16,9 +18,17 @@ from app.db.crud import (
     update_job_progress,
     mark_job_completed,
     mark_job_failed,
+    list_recent_jobs,
 )
 from app.core.enums import JobStatus
 from app.core.config import Settings
+from app.schemas.response import (
+    JobDetailResponse,
+    JobProgressResponse,
+    JobResultResponse,
+    JobListItemResponse,
+    JobListResponse,
+)
 
 
 def create_finetune_job(
@@ -148,3 +158,154 @@ def fail_job_training(
         error_message=error_message,
         finished_at=datetime.now(timezone.utc),
     )
+
+
+def get_job_detail(db: Any, job_id: str) -> JobDetailResponse:
+    """获取任务详情。
+
+    Args:
+        db: 数据库会话。
+        job_id: 任务 ID。
+
+    Returns:
+        任务详情响应。
+    """
+    job = get_job_by_id(db, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"任务不存在: {job_id}",
+        )
+
+    progress = JobProgressResponse(
+        current_step=job.current_step,
+        max_steps=job.max_steps,
+        last_loss=job.last_loss,
+    )
+
+    return JobDetailResponse(
+        job_id=job.id,
+        status=job.status,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        progress=progress,
+        error_message=job.error_message,
+        log_path=job.log_path,
+        model_path=job.model_path,
+    )
+
+
+def get_job_result(db: Any, job_id: str) -> JobResultResponse:
+    """获取任务结果。
+
+    Args:
+        db: 数据库会话。
+        job_id: 任务 ID。
+
+    Returns:
+        任务结果响应。
+    """
+    job = get_job_by_id(db, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"任务不存在: {job_id}",
+        )
+
+    if job.status != JobStatus.COMPLETED.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"任务未完成，当前状态: {job.status}",
+        )
+
+    return JobResultResponse(
+        job_id=job.id,
+        status=job.status,
+        output_dir=job.output_dir,
+        model_path=job.model_path,
+        metrics={},
+    )
+
+
+def read_job_log(db: Any, job_id: str, tail: Optional[int] = None) -> str:
+    """读取任务日志。
+
+    Args:
+        db: 数据库会话。
+        job_id: 任务 ID。
+        tail: 仅返回最后 N 行（可选）。
+
+    Returns:
+        日志文本。
+    """
+    job = get_job_by_id(db, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"任务不存在: {job_id}",
+        )
+
+    if not job.log_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="日志路径不存在",
+        )
+
+    log_path = Path(job.log_path)
+    if not log_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="日志文件不存在",
+        )
+
+    if tail is not None and tail <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tail 必须是正整数",
+        )
+
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.read().splitlines()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"读取日志失败: {exc}",
+        ) from exc
+
+    if tail is not None:
+        lines = lines[-tail:]
+
+    return "\n".join(lines)
+
+
+def list_job_summaries(db: Any, limit: int = 20) -> JobListResponse:
+    """获取任务列表摘要。
+
+    Args:
+        db: 数据库会话。
+        limit: 返回的最大条数。
+
+    Returns:
+        任务列表响应。
+    """
+    if limit <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="limit 必须是正整数",
+        )
+
+    jobs = list_recent_jobs(db, limit=limit)
+    items = [
+        JobListItemResponse(
+            job_id=job.id,
+            status=job.status,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            finished_at=job.finished_at,
+        )
+        for job in jobs
+    ]
+
+    return JobListResponse(items=items)

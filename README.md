@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。当前进度（第 3 步）已接入真实的 Chronos-2 微调，支持：
+本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。当前进度（第 4 步）已接入查询接口与真实的 Chronos-2 微调，支持：
 
 - **任务创建**：提交经过参数验证的微调任务
 - **任务持久化**：在 SQLite 数据库中存储任务元数据
@@ -25,13 +25,13 @@
 - ✅ 数据集加载（支持 CSV 和 Parquet 格式）
 - ✅ 任务状态流转（queued → running → completed/failed）
 - ✅ 进度跟踪（current_step, max_steps, last_loss）
+- ✅ 任务查询接口（详情 / 结果 / 日志）
 - ✅ CPU/CUDA 自动设备检测
 
 **暂未实现/计划中**：
 
 - 分布式训练（多GPU）
 - 任务取消功能
-- 任务查询接口的大幅扩展
 - 分布式 worker（当前为单线程）
 - 高级数据预处理和特征工程
 - 模型评估和验证指标
@@ -156,8 +156,7 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued",
-  "created_at": "2024-01-01T12:00:00Z"
+  "status": "queued"
 }
 ```
 
@@ -214,18 +213,72 @@ item2,2024-01-02,202.5
 
 ### 查询任务状态
 
-当前版本暂不支持直接的查询接口，但可以通过以下方式了解任务状态：
+当前版本已支持任务查询接口，包括详情、结果和日志：
+
+**1) 查询任务详情**
 
 ```bash
-# 1. 查看数据库中的任务信息
-sqlite3 ./data/finetune.db "SELECT id, status, started_at, finished_at, model_path FROM finetune_jobs;"
-
-# 2. 查看训练日志（实时）
-tail -f ./artifacts/<job_id>/train.log
-
-# 3. 检查输出目录
-ls -la ./artifacts/<job_id>/
+curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>
 ```
+
+响应示例：
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "running",
+  "created_at": "2024-01-01T12:00:00Z",
+  "started_at": "2024-01-01T12:00:10Z",
+  "finished_at": null,
+  "progress": {
+    "current_step": 120,
+    "max_steps": 1000,
+    "last_loss": 0.5321
+  },
+  "error_message": null,
+  "log_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/train.log",
+  "model_path": null
+}
+```
+
+**2) 查询任务结果（仅完成后可用）**
+
+```bash
+curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/result
+```
+
+响应示例：
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "output_dir": "./artifacts/550e8400-e29b-41d4-a716-446655440000",
+  "model_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt",
+  "metrics": {}
+}
+```
+
+**3) 查询任务日志（支持 tail）**
+
+```bash
+# 返回完整日志
+curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/logs
+
+# 返回最后 200 行
+curl "http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/logs?tail=200"
+```
+
+**4) 任务列表（可选）**
+
+```bash
+curl "http://127.0.0.1:8000/v1/finetune/jobs?limit=20"
+```
+
+**result 接口与 detail 接口的区别**
+
+- `detail`（`/v1/finetune/jobs/{job_id}`）：用于查询任务实时状态、进度和错误信息，任何状态都可用。
+- `result`（`/v1/finetune/jobs/{job_id}/result`）：仅在任务完成后返回模型输出与指标，否则返回 4xx。
 
 ### 任务目录结构
 
@@ -374,8 +427,86 @@ ts_model_train_and_finetune/
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued",
-  "created_at": "2024-01-01T12:00:00Z"
+  "status": "queued"
+}
+```
+
+### GET /v1/finetune/jobs/{job_id}
+
+查询任务详情与进度。
+
+**响应 200：**
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "running",
+  "created_at": "2024-01-01T12:00:00Z",
+  "started_at": "2024-01-01T12:00:10Z",
+  "finished_at": null,
+  "progress": {
+    "current_step": 120,
+    "max_steps": 1000,
+    "last_loss": 0.5321
+  },
+  "error_message": null,
+  "log_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/train.log",
+  "model_path": null
+}
+```
+
+**响应 404：** 任务不存在。
+
+### GET /v1/finetune/jobs/{job_id}/result
+
+查询任务结果（仅当 `status == completed` 时返回）。
+
+**响应 200：**
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "completed",
+  "output_dir": "./artifacts/550e8400-e29b-41d4-a716-446655440000",
+  "model_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt",
+  "metrics": {}
+}
+```
+
+**响应 409：** 任务未完成。
+**响应 404：** 任务不存在。
+
+### GET /v1/finetune/jobs/{job_id}/logs
+
+查询任务日志，默认返回全文，也支持 `tail` 参数。
+
+**响应 200（text/plain）：**
+
+```text
+训练开始: 任务 550e8400-e29b-41d4-a716-446655440000
+[步骤 1], 损失=0.98
+...
+```
+
+**响应 404：** 任务或日志文件不存在。
+
+### GET /v1/finetune/jobs
+
+查询最近任务列表（可选）。
+
+**响应 200：**
+
+```json
+{
+  "items": [
+    {
+      "job_id": "550e8400-e29b-41d4-a716-446655440000",
+      "status": "running",
+      "created_at": "2024-01-01T12:00:00Z",
+      "started_at": "2024-01-01T12:00:10Z",
+      "finished_at": null
+    }
+  ]
 }
 ```
 
@@ -398,6 +529,9 @@ pytest tests/test_worker_flow.py -v
 
 # 第 3 步：真实训练（含 mock）
 pytest tests/test_trainer_service.py -v
+
+# 第 4 步：任务查询接口
+pytest tests/test_query_api.py -v
 ```
 
 带覆盖率的测试：
@@ -442,8 +576,8 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 - ✅ 进度实时更新
 - ✅ 模型保存
 
-**第 4 步（规划中）**：任务查询和取消接口
-- ⏳ 任务查询端点
+**第 4 步（进行中）**：任务查询和取消接口
+- ✅ 任务查询端点（详情 / 结果 / 日志）
 - ⏳ 任务取消接口
 - ⏳ 进度流式查询
 

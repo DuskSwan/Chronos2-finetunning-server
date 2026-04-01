@@ -85,6 +85,27 @@ def list_jobs(
     return db.query(FinetuneJob).offset(skip).limit(limit).all()
 
 
+def list_recent_jobs(
+    db: Session,
+    limit: int = 20,
+) -> list[FinetuneJob]:
+    """获取最近创建的任务列表。
+
+    参数：
+        db: 数据库会话
+        limit: 返回的最大任务数
+
+    返回：
+        FinetuneJob 实例列表（按创建时间倒序）
+    """
+    return (
+        db.query(FinetuneJob)
+        .order_by(FinetuneJob.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def update_job_status(
     db: Session,
     job_id: str,

@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -15,7 +16,18 @@ from app.core.paths import ensure_dir
 from app.db.crud import create_job
 from app.db.session import get_db
 from app.schemas.request import CreateFinetuneJobRequest
-from app.schemas.response import CreateFinetuneJobResponse
+from app.schemas.response import (
+    CreateFinetuneJobResponse,
+    JobDetailResponse,
+    JobResultResponse,
+    JobListResponse,
+)
+from app.services.job_service import (
+    get_job_detail,
+    get_job_result,
+    read_job_log,
+    list_job_summaries,
+)
 from app.services.queue_service import get_job_queue
 
 router = APIRouter(prefix="/v1/finetune", tags=["finetune"])
@@ -160,3 +172,53 @@ async def create_finetune_job(
         job_id=job_id,
         status=JobStatus.queued.value,
     )
+
+
+@router.get(
+    "/jobs/{job_id}",
+    response_model=JobDetailResponse,
+)
+async def get_finetune_job_detail(
+    job_id: str,
+    db: Session = Depends(get_db),
+) -> JobDetailResponse:
+    """查询任务详情。"""
+    return get_job_detail(db, job_id)
+
+
+@router.get(
+    "/jobs/{job_id}/result",
+    response_model=JobResultResponse,
+)
+async def get_finetune_job_result(
+    job_id: str,
+    db: Session = Depends(get_db),
+) -> JobResultResponse:
+    """查询任务结果。"""
+    return get_job_result(db, job_id)
+
+
+@router.get(
+    "/jobs/{job_id}/logs",
+    response_class=PlainTextResponse,
+)
+async def get_finetune_job_logs(
+    job_id: str,
+    tail: int | None = None,
+    db: Session = Depends(get_db),
+) -> PlainTextResponse:
+    """查询任务日志。"""
+    log_text = read_job_log(db, job_id, tail=tail)
+    return PlainTextResponse(log_text)
+
+
+@router.get(
+    "/jobs",
+    response_model=JobListResponse,
+)
+async def list_finetune_jobs(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+) -> JobListResponse:
+    """查询任务列表（最近若干条）。"""
+    return list_job_summaries(db, limit=limit)
