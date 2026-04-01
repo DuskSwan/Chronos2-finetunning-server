@@ -1,5 +1,5 @@
 """
-CRUD operations for fine-tuning jobs.
+微调任务的 CRUD 操作。
 """
 
 import json
@@ -22,19 +22,19 @@ def create_job(
     max_steps: int,
 ) -> FinetuneJob:
     """
-    Create a new fine-tuning job record.
+    创建新的微调任务记录。
     
-    Args:
-        db: Database session
-        job_id: Unique job identifier
-        status: Job status (e.g., "queued")
-        request_data: Request parameters as dict
-        output_dir: Output directory path
-        log_path: Log file path
-        max_steps: Maximum training steps
+    参数：
+        db: 数据库会话
+        job_id: 唯一任务标识符
+        status: 任务状态（例如 "queued"）
+        request_data: 请求参数字典
+        output_dir: 输出目录路径
+        log_path: 日志文件路径
+        max_steps: 最大训练步数
     
-    Returns:
-        Created FinetuneJob instance
+    返回：
+        创建的 FinetuneJob 实例
     """
     job = FinetuneJob(
         id=job_id,
@@ -54,14 +54,14 @@ def create_job(
 
 def get_job_by_id(db: Session, job_id: str) -> Optional[FinetuneJob]:
     """
-    Get a job by ID.
+    根据 ID 获取任务。
     
-    Args:
-        db: Database session
-        job_id: Job identifier
+    参数：
+        db: 数据库会话
+        job_id: 任务标识符
     
-    Returns:
-        FinetuneJob if found, None otherwise
+    返回：
+        找到则返回 FinetuneJob，否则返回 None
     """
     return db.query(FinetuneJob).filter(FinetuneJob.id == job_id).first()
 
@@ -72,14 +72,14 @@ def list_jobs(
     limit: int = 100,
 ) -> list[FinetuneJob]:
     """
-    List all jobs with pagination.
+    列出所有任务并支持分页。
     
-    Args:
-        db: Database session
-        skip: Number of jobs to skip
-        limit: Maximum number of jobs to return
+    参数：
+        db: 数据库会话
+        skip: 跳过的任务数
+        limit: 返回的最大任务数
     
-    Returns:
-        List of FinetuneJob instances
+    返回：
+        FinetuneJob 实例列表
     """
     return db.query(FinetuneJob).offset(skip).limit(limit).all()

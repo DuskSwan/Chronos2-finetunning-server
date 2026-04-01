@@ -1,5 +1,5 @@
 """
-Configuration management for the application.
+应用配置管理。
 """
 
 from pathlib import Path
@@ -10,40 +10,40 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Application settings."""
+    """应用设置。"""
     
     model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
     
-    # Server
+    # 服务器
     host: str = "127.0.0.1"
     port: int = 8000
     
-    # Database
+    # 数据库
     sqlite_db_path: str = "./data/finetune.db"
     
-    # Paths
+    # 路径
     artifacts_root: str = "./artifacts"
     logs_root: str = "./logs"
     
-    # Model
+    # 模型
     default_model_id: str = "amazon/chronos-2"
     
     @property
     def sqlite_db_path_resolved(self) -> Path:
-        """Get resolved SQLite DB path."""
+        """获取解析后的 SQLite 数据库路径。"""
         return Path(self.sqlite_db_path).resolve()
     
     @property
     def artifacts_root_resolved(self) -> Path:
-        """Get resolved artifacts root path."""
+        """获取解析后的产物根目录路径。"""
         return Path(self.artifacts_root).resolve()
     
     @property
     def logs_root_resolved(self) -> Path:
-        """Get resolved logs root path."""
+        """获取解析后的日志根目录路径。"""
         return Path(self.logs_root).resolve()
 
 
 def get_settings() -> Settings:
-    """Get application settings instance."""
+    """获取应用设置实例。"""
     return Settings()

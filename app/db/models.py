@@ -1,5 +1,5 @@
 """
-SQLAlchemy models for fine-tuning jobs.
+微调任务的 SQLAlchemy 模型。
 """
 
 from datetime import datetime
@@ -12,7 +12,7 @@ Base = declarative_base()
 
 
 class FinetuneJob(Base):
-    """Fine-tune job model."""
+    """微调任务模型。"""
     
     __tablename__ = "finetune_jobs"
     

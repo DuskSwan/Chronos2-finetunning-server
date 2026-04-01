@@ -1,12 +1,12 @@
 """
-Status enumerations for fine-tuning jobs.
+微调任务的状态枚举。
 """
 
 from enum import Enum
 
 
 class JobStatus(str, Enum):
-    """Job status enumeration."""
+    """任务状态枚举。"""
     
     queued = "queued"
     running = "running"
@@ -16,7 +16,7 @@ class JobStatus(str, Enum):
 
 
 class FinetuneMode(str, Enum):
-    """Fine-tune mode enumeration."""
+    """微调模式枚举。"""
     
     lora = "lora"
     full = "full"

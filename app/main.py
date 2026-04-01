@@ -1,5 +1,5 @@
 """
-FastAPI application factory and configuration.
+FastAPI 应用工厂和配置。
 """
 
 from contextlib import asynccontextmanager
@@ -14,7 +14,7 @@ from app.db.init_db import init_db
 
 
 def initialize_directories() -> None:
-    """Initialize application directories."""
+    """初始化应用目录。"""
     settings = get_settings()
     ensure_dir(settings.artifacts_root_resolved)
     ensure_dir(settings.logs_root_resolved)
@@ -23,25 +23,25 @@ def initialize_directories() -> None:
 
 def create_app() -> FastAPI:
     """
-    Create and configure FastAPI application.
+    创建并配置 FastAPI 应用。
     
-    Returns:
-        Configured FastAPI app instance
+    返回：
+        配置好的 FastAPI 应用实例
     """
-    # Initialize directories
+    # 初始化目录
     initialize_directories()
     
-    # Initialize database
+    # 初始化数据库
     init_db()
     
-    # Create app
+    # 创建应用
     app = FastAPI(
-        title="Chronos-2 Fine-tuning Service",
+        title="Chronos-2 微调服务",
         version="0.1.0",
-        description="API for fine-tuning Chronos-2 time series models",
+        description="用于微调 Chronos-2 时间序列模型的 API",
     )
     
-    # Add CORS middleware
+    # 添加 CORS 中间件
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -50,7 +50,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     
-    # Include routers
+    # 包含路由器
     app.include_router(health.router)
     app.include_router(finetune.router)
     

@@ -1,5 +1,5 @@
 """
-Fine-tuning job creation endpoints.
+微调任务创建端点。
 """
 
 import json
@@ -22,40 +22,40 @@ router = APIRouter(prefix="/v1/finetune", tags=["finetune"])
 
 def validate_request(request: CreateFinetuneJobRequest) -> dict:
     """
-    Validate fine-tuning job request.
+    验证微调任务请求。
     
-    Args:
-        request: Request object
+    参数：
+        request: 请求对象
     
-    Returns:
-        Dictionary with validated parameters
+    返回：
+        包含验证参数的字典
     
-    Raises:
-        HTTPException: If validation fails
+    抛出：
+        HTTPException: 如果验证失败
     """
-    # Validate finetune_mode
+    # 验证 finetune_mode
     valid_modes = {FinetuneMode.lora.value, FinetuneMode.full.value}
     if request.finetune_mode not in valid_modes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"finetune_mode must be one of {valid_modes}, got {request.finetune_mode}",
+            detail=f"finetune_mode 必须是 {valid_modes} 之一，得到 {request.finetune_mode}",
         )
     
-    # Validate train_data_path is not empty
+    # 验证 train_data_path 非空
     if not request.train_data_path or not request.train_data_path.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="train_data_path is required and cannot be empty",
+            detail="train_data_path 是必需的且不能为空",
         )
     
-    # Validate prediction_length is positive
+    # 验证 prediction_length 为正数
     if request.prediction_length <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="prediction_length must be positive",
+            detail="prediction_length 必须为正数",
         )
     
-    # Validate other positive integers
+    # 验证其他正整数字段
     for field, value in [
         ("context_length", request.context_length),
         ("num_steps", request.num_steps),
@@ -65,14 +65,14 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         if value <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{field} must be positive",
+                detail=f"{field} 必须为正数",
             )
     
-    # Validate learning_rate is positive
+    # 验证 learning_rate 为正数
     if request.learning_rate <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="learning_rate must be positive",
+            detail="learning_rate 必须为正数",
         )
     
     return {
@@ -102,45 +102,45 @@ async def create_finetune_job(
     db: Session = Depends(get_db),
 ) -> CreateFinetuneJobResponse:
     """
-    Create a new fine-tuning job.
+    创建新的微调任务。
     
-    The job is queued in the database but not started.
+    任务在数据库中排队但不启动。
     
-    Args:
-        request: Fine-tuning job request
-        db: Database session
+    参数：
+        request: 微调任务请求
+        db: 数据库会话
     
-    Returns:
-        CreateFinetuneJobResponse with job_id and status
+    返回：
+        包含 job_id 和 status 的 CreateFinetuneJobResponse
     
-    Raises:
-        HTTPException: If validation fails
+    抛出：
+        HTTPException: 如果验证失败
     """
-    # Validate request
+    # 验证请求
     validated_params = validate_request(request)
     
-    # Generate job_id
+    # 生成 job_id
     job_id = str(uuid.uuid4())
     
-    # Get settings
+    # 获取设置
     settings = get_settings()
     
-    # Determine output root
+    # 确定输出根目录
     output_root = Path(validated_params["output_root"]) if validated_params["output_root"] else settings.artifacts_root_resolved
     
-    # Create job output directory
+    # 创建任务输出目录
     job_output_dir = output_root / job_id
     ensure_dir(job_output_dir)
     
-    # Write request.json
+    # 写入 request.json
     request_json_path = job_output_dir / "request.json"
     with open(request_json_path, "w") as f:
         json.dump(validated_params, f, indent=2)
     
-    # Define log path
+    # 定义日志路径
     log_path = job_output_dir / "train.log"
     
-    # Create job record in database
+    # 在数据库中创建任务记录
     db_job = create_job(
         db=db,
         job_id=job_id,

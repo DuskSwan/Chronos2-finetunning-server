@@ -1,77 +1,78 @@
-# Chronos-2 Model Fine-tuning Service
+# Chronos-2 模型微调服务
 
-A FastAPI-based service for fine-tuning Amazon Chronos-2 time series forecasting models using LoRA or full fine-tuning modes.
+基于 FastAPI 的服务，用于使用 LoRA 或全量微调模式微调亚马逊 Chronos-2 时间序列预测模型。
 
-## Project Overview
+## 项目概览
 
-This project provides a REST API to submit fine-tuning jobs for Chronos-2 models. In this first phase (Step 1), the service supports:
+本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。在第一阶段（步骤 1），服务支持：
 
-- **Job Creation**: Submit fine-tuning jobs with validated parameters
-- **Job Persistence**: Store job metadata in SQLite database
-- **Task Directory Management**: Automatically create output directories and save request manifests
-- **Health Checking**: Simple health check endpoint for service monitoring
+- **任务创建**：提交经过参数验证的微调任务
+- **任务持久化**：在 SQLite 数据库中存储任务元数据
+- **任务目录管理**：自动创建输出目录并保存请求清单
+- **健康检查**：简单的健康检查端点用于服务监控
 
-### Current Capabilities
+### 当前功能
 
-This step implements the task submission and persistence layer only. It does **NOT** include:
+本步骤仅实现任务提交和持久化层。**不包含**：
 
-- Background training worker processes
-- Asynchronous training execution
-- Real Chronos-2 model training invocations
-- Job cancellation
-- Callback mechanisms
-- Job query endpoints (except health check)
+- 后台训练 worker 进程
+- 异步训练执行
+- 真实的 Chronos-2 模型训练调用
+- 任务取消功能
+- 回调机制
+- 任务查询端点（除了健康检查）
 
-## Requirements
+## 需求
 
 - Python 3.11+
-- pip (or uv)
+- pip (或 uv)
 
-## Installation
+## 安装
 
-### 1. Create Virtual Environment
+### 1. 创建虚拟环境
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows 上使用: .venv\Scripts\activate
 ```
 
-### 2. Install Dependencies
+### 2. 安装依赖
 
 ```bash
 pip install -e .
-# Or with dev dependencies for testing:
+# 或带测试依赖：
 pip install -e ".[dev]"
 ```
 
-## Usage
+## 使用方法
 
-### Starting the Service
+### 启动服务
 
 ```bash
-# Using uvicorn directly
+# 直接使用 uvicorn
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-# Or using python -m
+# 或使用 python -m
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-The service will start at `http://127.0.0.1:8000`.
+服务将在 `http://127.0.0.1:8000` 启动。
 
-### Health Check
+### 健康检查
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-Response:
+响应：
+
 ```json
 {
   "status": "ok"
 }
 ```
 
-### Create a Fine-tuning Job
+### 创建微调任务
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
@@ -92,7 +93,8 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
   }'
 ```
 
-Response:
+响应：
+
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -100,54 +102,54 @@ Response:
 }
 ```
 
-## Configuration
+## 配置
 
-Configuration is managed via environment variables or a `.env` file:
+配置通过环境变量或 `.env` 文件管理：
 
 ```env
-# Server settings
+# 服务器设置
 HOST=127.0.0.1
 PORT=8000
 
-# Database
+# 数据库
 SQLITE_DB_PATH=./data/finetune.db
 
-# Paths
+# 路径
 ARTIFACTS_ROOT=./artifacts
 LOGS_ROOT=./logs
 
-# Model
+# 模型
 DEFAULT_MODEL_ID=amazon/chronos-2
 ```
 
-## Directory Structure
+## 目录结构
 
-```
+```bash
 ts_model_train_and_finetune/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py              # FastAPI application factory
-│   ├── api/                 # API routes
+│   ├── main.py              # FastAPI 应用工厂
+│   ├── api/                 # API 路由
 │   │   ├── __init__.py
-│   │   ├── health.py        # Health check endpoint
-│   │   └── finetune.py      # Job creation endpoint
-│   ├── core/                # Core configurations
+│   │   ├── health.py        # 健康检查端点
+│   │   └── finetune.py      # 任务创建端点
+│   ├── core/                # 核心配置
 │   │   ├── __init__.py
-│   │   ├── config.py        # Settings management
-│   │   ├── paths.py         # Path utilities
-│   │   └── enums.py         # Status enumerations
-│   ├── db/                  # Database layer
+│   │   ├── config.py        # 设置管理
+│   │   ├── paths.py         # 路径工具
+│   │   └── enums.py         # 状态枚举
+│   ├── db/                  # 数据库层
 │   │   ├── __init__.py
-│   │   ├── session.py       # SQLAlchemy session setup
-│   │   ├── models.py        # ORM models
-│   │   ├── crud.py          # CRUD operations
-│   │   └── init_db.py       # Database initialization
+│   │   ├── session.py       # SQLAlchemy 会话设置
+│   │   ├── models.py        # ORM 模型
+│   │   ├── crud.py          # CRUD 操作
+│   │   └── init_db.py       # 数据库初始化
 │   └── schemas/             # Pydantic schemas
 │       ├── __init__.py
-│       ├── request.py       # Request schemas
-│       └── response.py      # Response schemas
+│       ├── request.py       # 请求 schema
+│       └── response.py      # 响应 schema
 ├── tests/
-│   └── test_create_job.py   # Job creation tests
+│   └── test_create_job.py   # 任务创建测试
 ├── pyproject.toml
 ├── README.md
 └── .gitignore
@@ -158,7 +160,7 @@ ts_model_train_and_finetune/
 The `finetune_jobs` table stores job metadata with the following fields:
 
 | Field | Type | Nullable | Default |
-|-------|------|----------|---------|
+| ----- | ---- | -------- | ------- |
 | id | VARCHAR(36) | No | - |
 | status | VARCHAR(20) | No | "queued" |
 | request_json | TEXT | No | - |
@@ -181,6 +183,7 @@ The `finetune_jobs` table stores job metadata with the following fields:
 Health check endpoint.
 
 **Response 200:**
+
 ```json
 {
   "status": "ok"
@@ -194,7 +197,7 @@ Create a new fine-tuning job.
 **Request Body:**
 
 | Field | Type | Default | Required | Notes |
-|-------|------|---------|----------|-------|
+| ----- | ---- | ------- | -------- | ----- |
 | model_id | string | amazon/chronos-2 | No | - |
 | train_data_path | string | - | Yes | Path to training data |
 | val_data_path | string | null | No | Path to validation data |
@@ -210,6 +213,7 @@ Create a new fine-tuning job.
 | device | string | cpu | No | "cpu" or "cuda" |
 
 **Response 201:**
+
 ```json
 {
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -218,6 +222,7 @@ Create a new fine-tuning job.
 ```
 
 **Request Validation:**
+
 - `train_data_path`: Required, non-empty string
 - `prediction_length`: Required, positive integer
 - `context_length`: Positive integer

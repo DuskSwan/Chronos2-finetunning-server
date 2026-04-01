@@ -1,18 +1,18 @@
 """
-Response schemas for fine-tuning API.
+微调 API 的响应 Schema。
 """
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthCheckResponse(BaseModel):
-    """Health check response."""
+    """健康检查响应。"""
     
-    status: str = Field(description="Service status")
+    status: str = Field(description="服务状态")
 
 
 class CreateFinetuneJobResponse(BaseModel):
-    """Response for creating a fine-tuning job."""
+    """创建微调任务的响应。"""
     
     model_config = ConfigDict(
         json_schema_extra={
@@ -23,5 +23,5 @@ class CreateFinetuneJobResponse(BaseModel):
         }
     )
     
-    job_id: str = Field(description="Unique job identifier")
-    status: str = Field(description="Job status")
+    job_id: str = Field(description="唯一任务标识符")
+    status: str = Field(description="任务状态")

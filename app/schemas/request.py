@@ -1,5 +1,5 @@
 """
-Request schemas for fine-tuning API.
+微调 API 的请求 Schema。
 """
 
 from typing import Optional
@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CreateFinetuneJobRequest(BaseModel):
-    """Request schema for creating a fine-tuning job."""
+    """创建微调任务的请求 Schema。"""
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -30,115 +30,115 @@ class CreateFinetuneJobRequest(BaseModel):
     
     model_id: str = Field(
         default="amazon/chronos-2",
-        description="Model identifier",
+        description="模型标识符",
     )
     train_data_path: str = Field(
-        description="Path to training data file",
+        description="训练数据文件路径",
     )
     val_data_path: Optional[str] = Field(
         default=None,
-        description="Path to validation data file",
+        description="验证数据文件路径",
     )
     prediction_length: int = Field(
-        description="Prediction length for the model",
+        description="模型的预测长度",
     )
     context_length: int = Field(
         default=512,
-        description="Context length for the model",
+        description="模型的上下文长度",
     )
     finetune_mode: str = Field(
         default="lora",
-        description="Fine-tuning mode: 'lora' or 'full'",
+        description="微调模式: 'lora' 或 'full'",
     )
     learning_rate: float = Field(
         default=1e-4,
-        description="Learning rate for training",
+        description="训练学习率",
     )
     num_steps: int = Field(
         default=1000,
-        description="Number of training steps",
+        description="训练步数",
     )
     batch_size: int = Field(
         default=32,
-        description="Training batch size",
+        description="训练批大小",
     )
     logging_steps: int = Field(
         default=100,
-        description="Logging frequency (steps)",
+        description="日志记录频率（步数）",
     )
     output_root: Optional[str] = Field(
         default=None,
-        description="Output root directory (uses config default if null)",
+        description="输出根目录（如果为 null 则使用配置默认值）",
     )
     finetuned_ckpt_name: str = Field(
         default="finetuned-ckpt",
-        description="Name of the fine-tuned checkpoint",
+        description="微调检查点的名称",
     )
     device: str = Field(
         default="cpu",
-        description="Device to use: 'cpu' or 'cuda'",
+        description="使用的设备: 'cpu' 或 'cuda'",
     )
 
     @field_validator("train_data_path")
     @classmethod
     def validate_train_data_path(cls, v: str) -> str:
-        """Validate training data path is not empty."""
+        """验证训练数据路径非空。"""
         if not v or not v.strip():
-            raise ValueError("train_data_path cannot be empty")
+            raise ValueError("训练数据路径不能为空")
         return v
 
     @field_validator("prediction_length")
     @classmethod
     def validate_prediction_length(cls, v: int) -> int:
-        """Validate prediction length is positive."""
+        """验证预测长度为正整数。"""
         if v <= 0:
-            raise ValueError("prediction_length must be positive")
+            raise ValueError("预测长度必须是正整数")
         return v
 
     @field_validator("context_length")
     @classmethod
     def validate_context_length(cls, v: int) -> int:
-        """Validate context length is positive."""
+        """验证上下文长度为正整数。"""
         if v <= 0:
-            raise ValueError("context_length must be positive")
+            raise ValueError("上下文长度必须是正整数")
         return v
 
     @field_validator("finetune_mode")
     @classmethod
     def validate_finetune_mode(cls, v: str) -> str:
-        """Validate fine-tuning mode."""
+        """验证微调模式。"""
         if v not in ("lora", "full"):
-            raise ValueError("finetune_mode must be 'lora' or 'full'")
+            raise ValueError("微调模式必须是 'lora' 或 'full'")
         return v
 
     @field_validator("learning_rate")
     @classmethod
     def validate_learning_rate(cls, v: float) -> float:
-        """Validate learning rate is positive."""
+        """验证学习率为正数。"""
         if v <= 0:
-            raise ValueError("learning_rate must be positive")
+            raise ValueError("学习率必须是正数")
         return v
 
     @field_validator("num_steps")
     @classmethod
     def validate_num_steps(cls, v: int) -> int:
-        """Validate number of steps is positive."""
+        """验证训练步数为正整数。"""
         if v <= 0:
-            raise ValueError("num_steps must be positive")
+            raise ValueError("训练步数必须是正整数")
         return v
 
     @field_validator("batch_size")
     @classmethod
     def validate_batch_size(cls, v: int) -> int:
-        """Validate batch size is positive."""
+        """验证批大小为正整数。"""
         if v <= 0:
-            raise ValueError("batch_size must be positive")
+            raise ValueError("批大小必须是正整数")
         return v
 
     @field_validator("logging_steps")
     @classmethod
     def validate_logging_steps(cls, v: int) -> int:
-        """Validate logging steps is positive."""
+        """验证日志记录频率为正整数。"""
         if v <= 0:
-            raise ValueError("logging_steps must be positive")
+            raise ValueError("日志记录频率必须是正整数")
         return v

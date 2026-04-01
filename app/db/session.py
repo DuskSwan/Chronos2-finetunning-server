@@ -1,5 +1,5 @@
 """
-Database session management.
+数据库会话管理。
 """
 
 from pathlib import Path
@@ -13,21 +13,21 @@ from app.core.paths import ensure_dir
 
 
 def get_db_url(db_path: Path) -> str:
-    """Get SQLite database URL."""
-    # Ensure parent directory exists
+    """获取 SQLite 数据库 URL。"""
+    # 确保父目录存在
     ensure_dir(db_path.parent)
     return f"sqlite:///{db_path.as_posix()}"
 
 
 def create_session_factory(db_url: str) -> sessionmaker:
-    """Create SQLAlchemy session factory."""
+    """创建 SQLAlchemy 会话工厂。"""
     engine = create_engine(
         db_url,
         connect_args={"check_same_thread": False},
         echo=False,
     )
     
-    # Enable foreign keys for SQLite
+    # 为 SQLite 启用外键
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_conn, connection_record):
         cursor = dbapi_conn.cursor()
@@ -43,7 +43,7 @@ SessionLocal, engine = create_session_factory(db_url)
 
 
 def get_db() -> Generator[Session, None, None]:
-    """Dependency for getting database session."""
+    """用于获取数据库会话的依赖。"""
     db = SessionLocal()
     try:
         yield db

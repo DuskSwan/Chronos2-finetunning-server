@@ -1,5 +1,5 @@
 """
-Database initialization and schema management.
+数据库初始化和模式管理。
 """
 
 from sqlalchemy.orm import Session
@@ -9,10 +9,10 @@ from app.db.session import engine
 
 
 def init_db() -> None:
-    """Initialize database tables."""
+    """初始化数据库表。"""
     Base.metadata.create_all(bind=engine)
 
 
 def get_db_engine():
-    """Get the database engine."""
+    """获取数据库引擎。"""
     return engine
