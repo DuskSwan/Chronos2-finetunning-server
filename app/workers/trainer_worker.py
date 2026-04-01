@@ -18,7 +18,8 @@ from app.services.job_service import (
 )
 from app.services.trainer_service import mock_train
 from app.db.session import SessionLocal
-from app.db.crud import get_job_by_id
+from app.db.crud import get_job_by_id, mark_job_cancelled
+from app.core.enums import JobStatus
 from app.core.config import Settings
 
 
@@ -86,9 +87,21 @@ class TrainerWorker:
         
         try:
             # 1. 获取任务信息
+            db.expire_all()
             job = get_job_by_id(db, job_id)
             if not job:
                 logger.error(f"任务不存在: {job_id}")
+                return
+
+            # 若任务已取消，直接跳过
+            if job.status == JobStatus.cancelled.value:
+                logger.info(f"任务已取消，跳过处理: {job_id}")
+                return
+
+            # queued 状态下若已请求取消，直接标记为 cancelled
+            if job.cancel_requested and job.status == JobStatus.queued.value:
+                mark_job_cancelled(db, job_id)
+                logger.info(f"任务已请求取消（queued），已标记为 cancelled: {job_id}")
                 return
             
             # 2. 更新为运行状态
@@ -113,6 +126,14 @@ class TrainerWorker:
                 if not self._running:
                     logger.info(f"任务 {job_id} 被中断")
                     break
+
+                # 检查取消请求
+                db.expire_all()
+                job = get_job_by_id(db, job_id)
+                if job and job.cancel_requested:
+                    mark_job_cancelled(db, job_id)
+                    logger.info(f"任务 {job_id} 检测到取消请求，已取消")
+                    return
                 
                 # 执行一步训练（耗时 0.2 ~ 0.5 秒）
                 import random
@@ -139,7 +160,14 @@ class TrainerWorker:
             # 为演示目的，直接返回假的模型路径
             model_path = f"{job.output_dir}/finetuned-ckpt"
             
-            # 7. 标记为完成
+            # 7. 标记为完成（若未取消）
+            db.expire_all()
+            job = get_job_by_id(db, job_id)
+            if job and job.cancel_requested:
+                mark_job_cancelled(db, job_id)
+                logger.info(f"任务 {job_id} 在完成前被取消")
+                return
+
             complete_job_training(db, job_id, model_path)
             logger.info(f"任务 {job_id} 已完成，模型路径: {model_path}")
             

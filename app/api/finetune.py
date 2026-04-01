@@ -21,12 +21,14 @@ from app.schemas.response import (
     JobDetailResponse,
     JobResultResponse,
     JobListResponse,
+    CancelJobResponse,
 )
 from app.services.job_service import (
     get_job_detail,
     get_job_result,
     read_job_log,
     list_job_summaries,
+    request_cancel_job,
 )
 from app.services.queue_service import get_job_queue
 
@@ -222,3 +224,15 @@ async def list_finetune_jobs(
 ) -> JobListResponse:
     """查询任务列表（最近若干条）。"""
     return list_job_summaries(db, limit=limit)
+
+
+@router.post(
+    "/jobs/{job_id}/cancel",
+    response_model=CancelJobResponse,
+)
+async def cancel_finetune_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+) -> CancelJobResponse:
+    """取消任务（协作式取消）。"""
+    return request_cancel_job(db, job_id)

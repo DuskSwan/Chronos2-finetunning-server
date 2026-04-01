@@ -10,10 +10,14 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.db.crud import update_job_progress
+from app.db.crud import update_job_progress, get_job_by_id
 
 
 logger = logging.getLogger(__name__)
+
+
+class CancelledError(RuntimeError):
+    """训练过程中检测到取消请求时抛出。"""
 
 
 class ProgressCallback:
@@ -68,6 +72,7 @@ class ProgressCallback:
             loss: 当前步的损失值（可选）。
             **kwargs: 其他可能的指标字段。
         """
+        self.check_cancel_requested()
         self.current_step = step
 
         try:
@@ -167,3 +172,16 @@ class ProgressCallback:
                 f.write(f"{message}\n")
         except Exception as e:
             logger.warning(f"无法写入日志文件 {self.log_path}: {e}")
+
+    def check_cancel_requested(self) -> None:
+        """检查是否请求取消任务，若请求则抛出取消异常。"""
+        try:
+            self.db_session.expire_all()
+            job = get_job_by_id(self.db_session, self.job_id)
+        except Exception:
+            job = None
+
+        if job and job.cancel_requested:
+            message = "检测到取消请求，准备中止训练"
+            self._write_log(message)
+            raise CancelledError(message)

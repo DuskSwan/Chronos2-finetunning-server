@@ -71,3 +71,11 @@ class JobListItemResponse(BaseModel):
 class JobListResponse(BaseModel):
     """任务列表响应。"""
     items: list[JobListItemResponse] = Field(description="任务列表")
+
+
+class CancelJobResponse(BaseModel):
+    """取消任务响应。"""
+    job_id: str = Field(description="唯一任务标识符")
+    status: str = Field(description="任务状态")
+    cancel_requested: bool = Field(description="是否已请求取消")
+    message: Optional[str] = Field(default=None, description="取消结果说明")

@@ -193,7 +193,7 @@ def mark_job_completed(
     if not job:
         return None
     
-    job.status = JobStatus.COMPLETED.value
+    job.status = JobStatus.completed.value
     job.model_path = model_path
     job.finished_at = finished_at or datetime.now(timezone.utc)
     
@@ -224,10 +224,62 @@ def mark_job_failed(
     if not job:
         return None
     
-    job.status = JobStatus.FAILED.value
+    job.status = JobStatus.failed.value
     job.error_message = error_message
     job.finished_at = finished_at or datetime.now(timezone.utc)
     
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def set_cancel_requested(
+    db: Session,
+    job_id: str,
+    cancel_requested: bool = True,
+) -> Optional[FinetuneJob]:
+    """设置任务取消请求标记。
+
+    参数：
+        db: 数据库会话
+        job_id: 任务 ID
+        cancel_requested: 是否请求取消
+
+    返回：
+        更新后的 FinetuneJob，若不存在返回 None
+    """
+    job = get_job_by_id(db, job_id)
+    if not job:
+        return None
+
+    job.cancel_requested = cancel_requested
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def mark_job_cancelled(
+    db: Session,
+    job_id: str,
+    finished_at: Optional[datetime] = None,
+) -> Optional[FinetuneJob]:
+    """标记任务为取消。
+
+    参数：
+        db: 数据库会话
+        job_id: 任务 ID
+        finished_at: 完成时间
+
+    返回：
+        更新后的 FinetuneJob，若不存在返回 None
+    """
+    job = get_job_by_id(db, job_id)
+    if not job:
+        return None
+
+    job.status = JobStatus.cancelled.value
+    job.cancel_requested = True
+    job.finished_at = finished_at or datetime.now(timezone.utc)
     db.commit()
     db.refresh(job)
     return job

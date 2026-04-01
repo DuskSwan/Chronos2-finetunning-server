@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from app.callbacks.progress_callback import ProgressCallback
+from app.callbacks.progress_callback import ProgressCallback, CancelledError
 from app.services.dataset_service import (
     prepare_training_data,
     prepare_validation_data,
@@ -89,11 +89,13 @@ def train_chronos2(
         max_steps=num_steps,
     )
     callback.on_training_start()
+    callback.check_cancel_requested()
 
     try:
         # 1. 加载和转换数据
         logger.info(f"加载训练数据: {train_data_path}")
         callback._write_log(f"加载训练数据: {train_data_path}")
+        callback.check_cancel_requested()
 
         train_inputs = prepare_training_data(train_data_path)
         logger.info(f"训练数据准备完成: {len(train_inputs['target'])} 个时序")
@@ -103,6 +105,7 @@ def train_chronos2(
         if val_data_path:
             logger.info(f"加载验证数据: {val_data_path}")
             callback._write_log(f"加载验证数据: {val_data_path}")
+            callback.check_cancel_requested()
             validation_inputs = prepare_validation_data(val_data_path)
             if validation_inputs:
                 logger.info(
@@ -132,6 +135,7 @@ def train_chronos2(
         # 4. 加载 Chronos-2 模型
         logger.info(f"加载模型: {model_id}")
         callback._write_log(f"加载模型: {model_id}")
+        callback.check_cancel_requested()
 
         from chronos import ChronosPipeline
 
@@ -155,6 +159,7 @@ def train_chronos2(
             f"开始微调: finetune_mode={finetune_mode}, "
             f"num_steps={num_steps}"
         )
+        callback.check_cancel_requested()
 
         # 创建一个轻量的回调适配器（Chronos-2 的回调接口可能不同）
         class ChronosCallbackAdapter:
@@ -201,6 +206,10 @@ def train_chronos2(
 
         return str(model_save_path)
 
+    except CancelledError as e:
+        logger.info(f"训练被取消: {e}")
+        callback._write_log(str(e))
+        raise
     except Exception as e:
         logger.error(f"训练失败: {e}", exc_info=True)
         callback.on_exception(e)

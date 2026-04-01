@@ -19,6 +19,8 @@ from app.db.crud import (
     mark_job_completed,
     mark_job_failed,
     list_recent_jobs,
+    set_cancel_requested,
+    mark_job_cancelled,
 )
 from app.core.enums import JobStatus
 from app.core.config import Settings
@@ -28,6 +30,7 @@ from app.schemas.response import (
     JobResultResponse,
     JobListItemResponse,
     JobListResponse,
+    CancelJobResponse,
 )
 
 
@@ -70,7 +73,7 @@ def create_finetune_job(
     job = create_job(
         db=db,
         job_id=job_id,
-        status=JobStatus.QUEUED.value,
+        status=JobStatus.queued.value,
         request_json=json.dumps(request_data, ensure_ascii=False),
         output_dir=str(output_dir),
         log_path=log_path,
@@ -90,7 +93,7 @@ def start_job_training(db: Any, job_id: str) -> None:
     update_job_status(
         db=db,
         job_id=job_id,
-        status=JobStatus.RUNNING.value,
+        status=JobStatus.running.value,
         started_at=datetime.now(timezone.utc),
     )
 
@@ -213,7 +216,7 @@ def get_job_result(db: Any, job_id: str) -> JobResultResponse:
             detail=f"任务不存在: {job_id}",
         )
 
-    if job.status != JobStatus.COMPLETED.value:
+    if job.status != JobStatus.completed.value:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"任务未完成，当前状态: {job.status}",
@@ -309,3 +312,44 @@ def list_job_summaries(db: Any, limit: int = 20) -> JobListResponse:
     ]
 
     return JobListResponse(items=items)
+
+
+def request_cancel_job(db: Any, job_id: str) -> CancelJobResponse:
+    """请求取消任务。
+
+    Args:
+        db: 数据库会话。
+        job_id: 任务 ID。
+
+    Returns:
+        取消任务响应。
+    """
+    job = get_job_by_id(db, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"任务不存在: {job_id}",
+        )
+
+    if job.status == JobStatus.queued.value:
+        cancelled_job = mark_job_cancelled(db, job_id)
+        return CancelJobResponse(
+            job_id=cancelled_job.id,
+            status=cancelled_job.status,
+            cancel_requested=cancelled_job.cancel_requested,
+            message="任务已取消（queued）",
+        )
+
+    if job.status == JobStatus.running.value:
+        updated_job = set_cancel_requested(db, job_id, True)
+        return CancelJobResponse(
+            job_id=updated_job.id,
+            status=updated_job.status,
+            cancel_requested=updated_job.cancel_requested,
+            message="已请求取消，等待训练停止",
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"当前状态无法取消: {job.status}",
+    )

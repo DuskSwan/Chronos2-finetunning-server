@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。当前进度（第 4 步）已接入查询接口与真实的 Chronos-2 微调，支持：
+本项目提供一个 REST API 来提交 Chronos-2 模型的微调任务。当前进度（第 5 步）已接入查询接口、取消接口与真实的 Chronos-2 微调，支持：
 
 - **任务创建**：提交经过参数验证的微调任务
 - **任务持久化**：在 SQLite 数据库中存储任务元数据
@@ -26,12 +26,12 @@
 - ✅ 任务状态流转（queued → running → completed/failed）
 - ✅ 进度跟踪（current_step, max_steps, last_loss）
 - ✅ 任务查询接口（详情 / 结果 / 日志）
+- ✅ 任务取消接口（协作式取消）
 - ✅ CPU/CUDA 自动设备检测
 
 **暂未实现/计划中**：
 
 - 分布式训练（多GPU）
-- 任务取消功能
 - 分布式 worker（当前为单线程）
 - 高级数据预处理和特征工程
 - 模型评估和验证指标
@@ -184,7 +184,7 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 - `running`: 后台 worker 正在执行 Chronos-2 微调
 - `completed`: 训练成功完成
 - `failed`: 训练过程中出现错误
-- `cancelled`: 任务已取消（暂未实现）
+- `cancelled`: 任务已取消（协作式取消）
 
 ### 支持的数据格式
 
@@ -273,6 +273,30 @@ curl "http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/logs?tail=200"
 
 ```bash
 curl "http://127.0.0.1:8000/v1/finetune/jobs?limit=20"
+```
+
+### 取消任务
+
+当前版本支持**协作式取消**（cooperative cancellation），不会强制杀进程：
+
+- `queued`：直接标记为 `cancelled`，任务不会被执行。
+- `running`：设置 `cancel_requested=true`，训练回调/训练循环检测到后尽快中止，并最终标记为 `cancelled`。
+
+**取消接口：**
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/cancel
+```
+
+响应示例：
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "running",
+  "cancel_requested": true,
+  "message": "已请求取消，等待训练停止"
+}
 ```
 
 **result 接口与 detail 接口的区别**
@@ -510,6 +534,24 @@ ts_model_train_and_finetune/
 }
 ```
 
+### POST /v1/finetune/jobs/{job_id}/cancel
+
+取消任务（协作式取消，不强制杀进程）。
+
+**响应 200：**
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "running",
+  "cancel_requested": true,
+  "message": "已请求取消，等待训练停止"
+}
+```
+
+**响应 409：** 当前状态无法取消（completed/failed/cancelled）。
+**响应 404：** 任务不存在。
+
 ## 测试
 
 运行完整测试套件：
@@ -532,6 +574,9 @@ pytest tests/test_trainer_service.py -v
 
 # 第 4 步：任务查询接口
 pytest tests/test_query_api.py -v
+
+# 第 5 步：任务取消接口
+pytest tests/test_cancel_job.py -v
 ```
 
 带覆盖率的测试：
@@ -576,12 +621,14 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 - ✅ 进度实时更新
 - ✅ 模型保存
 
-**第 4 步（进行中）**：任务查询和取消接口
+**第 4 步（已完成）**：任务查询接口
 - ✅ 任务查询端点（详情 / 结果 / 日志）
-- ⏳ 任务取消接口
+
+**第 5 步（进行中）**：取消与辅助接口
+- ✅ 任务取消接口（协作式取消）
 - ⏳ 进度流式查询
 
-**第 5 步（规划中）**：分布式和性能优化
+**第 6 步（规划中）**：分布式和性能优化
 - ⏳ 多 GPU 训练支持
 - ⏳ 分布式 worker
 - ⏳ 模型评估和验证指标
