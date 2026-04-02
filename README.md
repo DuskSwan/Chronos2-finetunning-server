@@ -409,18 +409,18 @@ ts_model_train_and_finetune/
 
 ## 前端 API 文档
 
-**基础信息**
+### 基础信息
 
 Base URL: `http://127.0.0.1:8000`  
 Content-Type: `application/json`  
 时间字段: ISO 8601（UTC）  
 认证: 无
 
-**任务状态**
+### 任务状态
 
 `queued` / `running` / `completed` / `failed` / `cancelled`
 
-**GET /health**
+### GET /health
 
 用途: 健康检查  
 响应 200:
@@ -431,13 +431,13 @@ Content-Type: `application/json`
 }
 ```
 
-**POST /v1/finetune/jobs**
+### POST /v1/finetune/jobs
 
 用途: 创建训练任务  
 请求体:
 
 | 字段 | 类型 | 默认值 | 必需 | 说明 |
-|------|------|--------|------|------|
+| ---- | ---- | ------ | ---- | ---- |
 | train_data_path | str | - | **是** | 训练数据路径 |
 | val_data_path | str \| null | null | 否 | 验证数据路径 |
 | prediction_length | int | - | **是** | 预测长度（正整数） |
@@ -463,7 +463,7 @@ Content-Type: `application/json`
 
 常见错误: 422（参数校验失败）
 
-**GET /v1/finetune/jobs**
+### GET /v1/finetune/jobs
 
 用途: 查询最近任务列表  
 查询参数: `limit` (int, 默认 20)  
@@ -483,7 +483,7 @@ Content-Type: `application/json`
 }
 ```
 
-**GET /v1/finetune/jobs/{job_id}**
+### GET /v1/finetune/jobs/{job_id}
 
 用途: 查询任务详情与进度  
 响应 200:
@@ -508,7 +508,7 @@ Content-Type: `application/json`
 
 常见错误: 404（任务不存在）
 
-**GET /v1/finetune/jobs/{job_id}/result**
+### GET /v1/finetune/jobs/{job_id}/result
 
 用途: 查询任务结果（仅完成后可用）  
 响应 200:
@@ -525,7 +525,7 @@ Content-Type: `application/json`
 
 常见错误: 409（任务未完成），404（任务不存在）
 
-**GET /v1/finetune/jobs/{job_id}/logs**
+### GET /v1/finetune/jobs/{job_id}/logs
 
 用途: 查询日志  
 查询参数: `tail` (int, 可选，仅返回最后 N 行)  
@@ -539,7 +539,7 @@ Content-Type: `application/json`
 
 常见错误: 404（任务或日志文件不存在）
 
-**POST /v1/finetune/jobs/{job_id}/cancel**
+### POST /v1/finetune/jobs/{job_id}/cancel
 
 用途: 请求取消任务（协作式取消）  
 响应 200:
@@ -554,7 +554,6 @@ Content-Type: `application/json`
 ```
 
 常见错误: 409（状态不允许取消），404（任务不存在）
-
 
 ## 测试
 
