@@ -407,13 +407,23 @@ ts_model_train_and_finetune/
 | last_loss | FLOAT | 是 | NULL |
 | cancel_requested | BOOLEAN | 否 | False |
 
-## API 端点
+## 前端 API 文档
 
-### GET /health
+**基础信息**
 
-健康检查端点。返回服务状态。
+Base URL: `http://127.0.0.1:8000`  
+Content-Type: `application/json`  
+时间字段: ISO 8601（UTC）  
+认证: 无
 
-**响应 200：**
+**任务状态**
+
+`queued` / `running` / `completed` / `failed` / `cancelled`
+
+**GET /health**
+
+用途: 健康检查  
+响应 200:
 
 ```json
 {
@@ -421,29 +431,28 @@ ts_model_train_and_finetune/
 }
 ```
 
-### POST /v1/finetune/jobs
+**POST /v1/finetune/jobs**
 
-创建新的微调任务。
-
-**请求体参数：**
+用途: 创建训练任务  
+请求体:
 
 | 字段 | 类型 | 默认值 | 必需 | 说明 |
-| ---- | ---- | ------ | ---- | ---- |
+|------|------|--------|------|------|
 | train_data_path | str | - | **是** | 训练数据路径 |
-| val_data_path | str | null | 否 | 验证数据路径 |
-| prediction_length | int | - | **是** | 预测长度（必须为正整数） |
-| context_length | int | 512 | 否 | 上下文长度（必须为正整数） |
-| finetune_mode | str | lora | 否 | 微调模式："lora" 或 "full" |
-| learning_rate | float | 0.0001 | 否 | 学习率（必须为正浮点数） |
-| num_steps | int | 1000 | 否 | 训练总步数（必须为正整数） |
-| batch_size | int | 32 | 否 | 批处理大小（必须为正整数） |
-| logging_steps | int | 100 | 否 | 日志间隔（必须为正整数） |
-| output_root | str | null | 否 | 输出根目录（为空则使用 artifacts 目录） |
-| finetuned_ckpt_name | str | finetuned-ckpt | 否 | 微调模型保存名称 |
-| device | str | cpu | 否 | 设备："cpu" 或 "cuda" |
-| selected_columns | list[str] \| null | null | 否 | 仅使用指定列（为空则使用全部列） |
+| val_data_path | str \| null | null | 否 | 验证数据路径 |
+| prediction_length | int | - | **是** | 预测长度（正整数） |
+| context_length | int | 512 | 否 | 上下文长度（正整数） |
+| finetune_mode | str | lora | 否 | `"lora"` 或 `"full"` |
+| learning_rate | float | 0.0001 | 否 | 学习率（正数） |
+| num_steps | int | 1000 | 否 | 训练总步数（正整数） |
+| batch_size | int | 32 | 否 | 批处理大小（正整数） |
+| logging_steps | int | 100 | 否 | 日志间隔（正整数） |
+| output_root | str \| null | null | 否 | 输出根目录（为空则用 `./artifacts`） |
+| finetuned_ckpt_name | str | finetuned-ckpt | 否 | 模型保存目录名 |
+| device | str | cpu | 否 | `"cpu"` 或 `"cuda"` |
+| selected_columns | list[str] \| null | null | 否 | 使用指定列；不传则使用全部列 |
 
-**响应 201：**
+响应 201:
 
 ```json
 {
@@ -452,11 +461,32 @@ ts_model_train_and_finetune/
 }
 ```
 
-### GET /v1/finetune/jobs/{job_id}
+常见错误: 422（参数校验失败）
 
-查询任务详情与进度。
+**GET /v1/finetune/jobs**
 
-**响应 200：**
+用途: 查询最近任务列表  
+查询参数: `limit` (int, 默认 20)  
+响应 200:
+
+```json
+{
+  "items": [
+    {
+      "job_id": "550e8400-e29b-41d4-a716-446655440000",
+      "status": "running",
+      "created_at": "2024-01-01T12:00:00Z",
+      "started_at": "2024-01-01T12:00:10Z",
+      "finished_at": null
+    }
+  ]
+}
+```
+
+**GET /v1/finetune/jobs/{job_id}**
+
+用途: 查询任务详情与进度  
+响应 200:
 
 ```json
 {
@@ -476,13 +506,12 @@ ts_model_train_and_finetune/
 }
 ```
 
-**响应 404：** 任务不存在。
+常见错误: 404（任务不存在）
 
-### GET /v1/finetune/jobs/{job_id}/result
+**GET /v1/finetune/jobs/{job_id}/result**
 
-查询任务结果（仅当 `status == completed` 时返回）。
-
-**响应 200：**
+用途: 查询任务结果（仅完成后可用）  
+响应 200:
 
 ```json
 {
@@ -494,14 +523,13 @@ ts_model_train_and_finetune/
 }
 ```
 
-**响应 409：** 任务未完成。
-**响应 404：** 任务不存在。
+常见错误: 409（任务未完成），404（任务不存在）
 
-### GET /v1/finetune/jobs/{job_id}/logs
+**GET /v1/finetune/jobs/{job_id}/logs**
 
-查询任务日志，默认返回全文，也支持 `tail` 参数。
-
-**响应 200（text/plain）：**
+用途: 查询日志  
+查询参数: `tail` (int, 可选，仅返回最后 N 行)  
+响应 200（`text/plain`）:
 
 ```text
 训练开始: 任务 550e8400-e29b-41d4-a716-446655440000
@@ -509,33 +537,12 @@ ts_model_train_and_finetune/
 ...
 ```
 
-**响应 404：** 任务或日志文件不存在。
+常见错误: 404（任务或日志文件不存在）
 
-### GET /v1/finetune/jobs
+**POST /v1/finetune/jobs/{job_id}/cancel**
 
-查询最近任务列表（可选）。
-
-**响应 200：**
-
-```json
-{
-  "items": [
-    {
-      "job_id": "550e8400-e29b-41d4-a716-446655440000",
-      "status": "running",
-      "created_at": "2024-01-01T12:00:00Z",
-      "started_at": "2024-01-01T12:00:10Z",
-      "finished_at": null
-    }
-  ]
-}
-```
-
-### POST /v1/finetune/jobs/{job_id}/cancel
-
-取消任务（协作式取消，不强制杀进程）。
-
-**响应 200：**
+用途: 请求取消任务（协作式取消）  
+响应 200:
 
 ```json
 {
@@ -546,8 +553,8 @@ ts_model_train_and_finetune/
 }
 ```
 
-**响应 409：** 当前状态无法取消（completed/failed/cancelled）。
-**响应 404：** 任务不存在。
+常见错误: 409（状态不允许取消），404（任务不存在）
+
 
 ## 测试
 
