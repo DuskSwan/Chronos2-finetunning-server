@@ -122,6 +122,7 @@ def test_cancel_queued_job_success(client: TestClient, isolated_app):
 
     db = TestSessionLocal()
     job = crud.get_job_by_id(db, job_id)
+    assert job is not None
     assert job.status == "cancelled"
     assert job.cancel_requested is True
     assert job.finished_at is not None
@@ -166,6 +167,7 @@ def test_cancel_running_job_eventually_cancelled(
 
     db = TestSessionLocal()
     job = crud.get_job_by_id(db, job_id)
+    assert job is not None
     assert job.status == "cancelled"
     db.close()
 
@@ -223,5 +225,6 @@ def test_cancelled_job_not_marked_completed(client: TestClient, isolated_app, te
 
     db = TestSessionLocal()
     job = crud.get_job_by_id(db, job_id)
+    assert job is not None
     assert job.status == "cancelled"
     db.close()
