@@ -1,20 +1,11 @@
-"""Chronos-2 训练服务的测试。
-
-本模块使用 mock 进行单元测试，不进行真实的长时间训练。
-"""
-
-import json
+"""Chronos-2 训练服务的测试。"""
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-
 import pytest
-
-from app.db.session import SessionLocal, engine
-from app.db.models import Base, FinetuneJob
-from app.db.crud import create_job, get_job_by_id, update_job_progress
+from app.db.models import Base
+from app.db.crud import create_job, get_job_by_id
 from app.callbacks.progress_callback import ProgressCallback
-from app.services.trainer_service import train_chronos2, mock_train
+from app.services.trainer_service import train_chronos2
 from app.services.dataset_service import prepare_input_data, load_data
 
 
@@ -139,98 +130,84 @@ class TestProgressCallback:
 class TestTrainerService:
     """训练服务的测试。"""
 
-    def test_mock_train(self, tmp_path):
-        """测试模拟训练器。"""
-        config = {"output_dir": str(tmp_path)}
-        
-        model_path = mock_train(config, steps=2)
-        
-        assert model_path == str(tmp_path / "finetuned-ckpt")
-
-    @patch("app.services.trainer_service.prepare_input_data")
-    @patch("chronos.ChronosPipeline")
     def test_train_chronos2_success(
         self,
-        mock_pipeline_class,
-        mock_prepare_input,
         temp_db,
         tmp_path,
+        sample_csv_data,
     ):
-        """测试成功的 Chronos-2 训练（使用 mock）。"""
+        """测试成功的 Chronos-2 训练（真实流程）。"""
         db, tmpdir = temp_db
         job_id = "test-job-3"
         output_dir = str(tmp_path)
         log_path = str(Path(tmpdir) / "train.log")
-        
+
         # 创建任务记录
         create_job(
             db,
             job_id=job_id,
             status="running",
-            request_json='{}',
+            request_json="{}",
             output_dir=output_dir,
             log_path=log_path,
-            max_steps=100,
+            max_steps=1,
         )
-        
-        # Mock 数据准备
-        import numpy as np
-        mock_prepare_input.return_value = np.zeros((1, 1, 5))
-        
-        # Mock 模型
-        mock_pipeline = MagicMock()
-        mock_pipeline_class.from_pretrained.return_value = mock_pipeline
-        mock_fine_tuned = MagicMock()
-        mock_pipeline.fit.return_value = mock_fine_tuned
-        
-        # 调用训练
+
+        # 调用真实训练
         result = train_chronos2(
             db=db,
             job_id=job_id,
-            train_data_path="/fake/path/train.csv",
+            train_data_path=sample_csv_data,
             val_data_path=None,
             output_dir=output_dir,
             log_path=log_path,
             model_id="amazon/chronos-2",
-            prediction_length=96,
-            num_steps=10,
+            prediction_length=1,
+            context_length=2,
+            finetune_mode="lora",
+            learning_rate=1e-4,
+            num_steps=1,
+            batch_size=1,
+            logging_steps=1,
+            finetuned_ckpt_name="finetuned-ckpt",
+            device="cpu",
+            selected_columns=["target"],
         )
-        
-        # 验证
-        assert result.endswith("finetuned-ckpt")
-        
-        # 验证数据准备调用
-        mock_prepare_input.assert_called_once()
 
-    @patch("app.services.trainer_service.prepare_input_data")
+        # 验证模型路径与日志
+        model_path = Path(result)
+        assert model_path.exists()
+        assert model_path.is_dir()
+        assert Path(log_path).exists()
+        log_text = Path(log_path).read_text(encoding="utf-8")
+        assert "训练开始" in log_text
+        assert "模型保存成功" in log_text
+
     def test_train_chronos2_data_not_found(
         self,
-        mock_prepare_input,
         temp_db,
         tmp_path,
     ):
-        """测试数据文件不存在的情况。"""
+        """测试数据文件不存在的情况（真实流程）。"""
         db, tmpdir = temp_db
         job_id = "test-job-4"
-        
-        # Mock 数据加载失败
-        mock_prepare_input.side_effect = FileNotFoundError("数据文件不存在")
-        
+
         create_job(
             db,
             job_id=job_id,
             status="running",
-            request_json='{}',
+            request_json="{}",
             output_dir=str(tmp_path),
             log_path=str(Path(tmpdir) / "train.log"),
         )
-        
+
         # 验证异常
+        missing_path = str(Path(tmp_path) / "missing.csv")
         with pytest.raises(FileNotFoundError):
             train_chronos2(
                 db=db,
                 job_id=job_id,
-                train_data_path="/fake/path/train.csv",
+                train_data_path=missing_path,
                 val_data_path=None,
                 output_dir=str(tmp_path),
                 log_path=str(Path(tmpdir) / "train.log"),

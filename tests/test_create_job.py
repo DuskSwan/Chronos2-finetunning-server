@@ -71,12 +71,13 @@ def client(test_settings, test_db_session):
         yield test_db_session
     
     with patch("app.main.get_settings", return_value=test_settings):
-        with patch("app.core.paths.ensure_dir") as mock_ensure_dir:
-            # Mock ensure_dir to just return the path
-            mock_ensure_dir.side_effect = lambda path: path
-            app = create_app()
-            app.dependency_overrides[get_db] = get_test_db
-            return TestClient(app)
+        with patch("app.main.initialize_worker", lambda *_args, **_kwargs: None):
+            with patch("app.core.paths.ensure_dir") as mock_ensure_dir:
+                # Mock ensure_dir to just return the path
+                mock_ensure_dir.side_effect = lambda path: path
+                app = create_app()
+                app.dependency_overrides[get_db] = get_test_db
+                return TestClient(app)
 
 
 def test_health_check(client):

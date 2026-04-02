@@ -146,7 +146,7 @@ def train_chronos2(
         pipeline: Chronos2Pipeline = BaseChronosPipeline.from_pretrained(
             model_id,
             device_map=use_device,
-            torch_dtype="float32",
+            dtype="float32",
         )
 
         logger.info(f"模型加载成功: {model_id}")
@@ -181,7 +181,6 @@ def train_chronos2(
         fine_tuned_pipeline = pipeline.fit(
             train_inputs,
             validation_inputs=validation_inputs,
-            epochs=1,  # 单个 epoch（num_steps 控制总步数）
             batch_size=batch_size,
             learning_rate=learning_rate,
             num_steps=num_steps,

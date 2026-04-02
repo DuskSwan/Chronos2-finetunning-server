@@ -5,10 +5,8 @@ worker 流程集成测试。
 """
 
 import json
-import time
 import tempfile
 from pathlib import Path
-from unittest import mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,9 +17,9 @@ from app.main import create_app
 from app.core.config import Settings
 from app.db.models import Base
 from app.db.crud import get_job_by_id
-from app.db.session import SessionLocal
 from app.services.queue_service import initialize_queue, get_job_queue
-from app.workers.trainer_worker import initialize_worker
+from app.services.job_service import start_job_training
+from app.workers.trainer_worker import TrainerWorker
 
 
 @pytest.fixture
@@ -58,8 +56,26 @@ def test_settings(temp_dirs) -> Settings:
 
 
 @pytest.fixture
+def sample_csv_data(temp_dirs):
+    """创建示例 CSV 数据文件。"""
+    csv_content = """item_id,timestamp,target
+item1,2024-01-01,100.5
+item1,2024-01-02,101.3
+item1,2024-01-03,99.8
+item2,2024-01-01,200.1
+item2,2024-01-02,202.5
+item2,2024-01-03,201.2
+"""
+    csv_path = Path(temp_dirs["root"]) / "train.csv"
+    csv_path.write_text(csv_content)
+    return str(csv_path)
+
+
+@pytest.fixture
 def isolated_app(test_settings: Settings, monkeypatch):
     """创建独立的应用实例，带有自己的数据库和 worker。"""
+    initialize_queue()
+
     # 创建本地数据库
     db_url = f"sqlite:///{test_settings.sqlite_db_path_resolved.as_posix()}"
     engine = create_engine(
@@ -71,20 +87,18 @@ def isolated_app(test_settings: Settings, monkeypatch):
     # 覆盖 SessionLocal
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     
-    def mock_get_db():
-        db = TestSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-    
     monkeypatch.setattr("app.db.session.SessionLocal", TestSessionLocal)
+    monkeypatch.setattr("app.workers.trainer_worker.SessionLocal", TestSessionLocal)
     
     # 覆盖 get_settings
     def mock_get_settings():
         return test_settings
     
     monkeypatch.setattr("app.core.config.get_settings", mock_get_settings)
+    monkeypatch.setattr("app.main.get_settings", mock_get_settings)
+
+    # 禁用应用启动时的后台 worker，避免并发干扰
+    monkeypatch.setattr("app.main.initialize_worker", lambda *_args, **_kwargs: None)
     
     # 初始化应用
     app = create_app()
@@ -121,12 +135,12 @@ def test_health_check(client: TestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_create_job_queued(client: TestClient) -> None:
+def test_create_job_queued(client: TestClient, sample_csv_data: str) -> None:
     """测试创建任务时状态为 queued。"""
     response = client.post(
         "/v1/finetune/jobs",
         json={
-            "train_data_path": "/path/to/train.csv",
+            "train_data_path": sample_csv_data,
             "prediction_length": 96,
         },
     )
@@ -182,7 +196,7 @@ def test_output_directory_created(temp_dirs: dict) -> None:
     assert output_dir.is_dir()
 
 
-def test_job_enters_queue(client: TestClient) -> None:
+def test_job_enters_queue(client: TestClient, sample_csv_data: str) -> None:
     """测试任务被加入队列。"""
     queue = get_job_queue()
     initial_size = queue.size()
@@ -190,7 +204,7 @@ def test_job_enters_queue(client: TestClient) -> None:
     response = client.post(
         "/v1/finetune/jobs",
         json={
-            "train_data_path": "/path/to/train.csv",
+            "train_data_path": sample_csv_data,
             "prediction_length": 96,
         },
     )
@@ -202,39 +216,37 @@ def test_job_enters_queue(client: TestClient) -> None:
     assert new_size == initial_size + 1
 
 
-def test_job_transitions_to_running(client: TestClient, isolated_app, test_settings: Settings) -> None:
-    """测试任务状态从 queued 转变为 running（使用实际 worker）。"""
+def test_job_transitions_to_running(client: TestClient, isolated_app) -> None:
+    """测试任务状态从 queued 转变为 running。"""
     _, TestSessionLocal, _ = isolated_app
     
     # 创建任务
     response = client.post(
         "/v1/finetune/jobs",
         json={
-            "train_data_path": "/path/to/train.csv",
+            "train_data_path": "dummy.csv",
             "prediction_length": 96,
         },
     )
     
     job_id = response.json()["job_id"]
-    
-    # 等待 worker 处理任务
-    time.sleep(0.5)
-    
-    # 检查任务状态
+
+    # 手动触发进入 running
     db = TestSessionLocal()
     try:
+        start_job_training(db, job_id)
         job = get_job_by_id(db, job_id)
         assert job is not None
-        # 任务应该在 queued 或 running 中
-        assert job.status in ["queued", "running"]
+        assert job.status == "running"
+        assert job.started_at is not None
     finally:
         db.close()
 
 
-def test_job_completes(client: TestClient, isolated_app, test_settings: Settings) -> None:
+def test_job_completes(client: TestClient, isolated_app, test_settings: Settings, sample_csv_data: str) -> None:
     """测试任务完成流程（使用实际 worker）。
     
-    注：需要较长等待时间，因为假训练需要时间完成。
+    注：真实训练可能需要下载模型并耗时。
     """
     _, TestSessionLocal, _ = isolated_app
     
@@ -242,57 +254,66 @@ def test_job_completes(client: TestClient, isolated_app, test_settings: Settings
     response = client.post(
         "/v1/finetune/jobs",
         json={
-            "train_data_path": "/path/to/train.csv",
-            "prediction_length": 96,
-            "num_steps": 5,
+            "train_data_path": sample_csv_data,
+            "prediction_length": 1,
+            "context_length": 2,
+            "num_steps": 1,
+            "batch_size": 1,
+            "logging_steps": 1,
+            "selected_columns": ["target"],
         },
     )
     
     assert response.status_code == 201
     job_id = response.json()["job_id"]
-    
-    # 验证默认等待一部分时间，看任务是否被消费
-    time.sleep(2)
+
+    # 使用真实 worker 同步处理任务
+    worker = TrainerWorker(test_settings)
+    worker._process_job(job_id)
     
     db = TestSessionLocal()
     try:
         job = get_job_by_id(db, job_id)
         assert job is not None
-        # 任务应该至少已enter运行或之后的状态，或仍在 queued 中等待
-        assert job.status in ["queued", "running", "completed", "failed"]
+        assert job.status == "completed"
+        assert job.model_path is not None
+        assert Path(job.model_path).exists()
     finally:
         db.close()
 
 
-def test_job_progress_tracked(client: TestClient, isolated_app, test_settings: Settings) -> None:
-    """测试任务进度被跟踪。"""
+def test_job_progress_tracked(client: TestClient, isolated_app, test_settings: Settings, sample_csv_data: str) -> None:
+    """测试任务日志被写入。"""
     _, TestSessionLocal, _ = isolated_app
     
     # 创建任务
     response = client.post(
         "/v1/finetune/jobs",
         json={
-            "train_data_path": "/path/to/train.csv",
-            "prediction_length": 96,
-            "num_steps": 5,
+            "train_data_path": sample_csv_data,
+            "prediction_length": 1,
+            "context_length": 2,
+            "num_steps": 1,
+            "batch_size": 1,
+            "logging_steps": 1,
+            "selected_columns": ["target"],
         },
     )
     
     job_id = response.json()["job_id"]
-    
-    # 等一段时间让任务运行
-    time.sleep(2)
+
+    worker = TrainerWorker(test_settings)
+    worker._process_job(job_id)
     
     # 检查进度
     db = TestSessionLocal()
     try:
         job = get_job_by_id(db, job_id)
         assert job is not None
-        
-        # 如果任务在运行或已完成，进度应该有更新
-        if job.status == "running":
-            assert job.current_step > 0
-        elif job.status == "completed":
-            assert job.current_step == job.max_steps
+        assert job.log_path is not None
+        assert Path(job.log_path).exists()
+        log_text = Path(job.log_path).read_text(encoding="utf-8")
+        assert "训练开始" in log_text
+        assert "模型保存成功" in log_text
     finally:
         db.close()

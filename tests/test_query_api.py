@@ -69,9 +69,10 @@ def client(test_settings, test_db_session):
         yield test_db_session
 
     with patch("app.main.get_settings", return_value=test_settings):
-        app = create_app()
-        app.dependency_overrides[get_db] = get_test_db
-        return TestClient(app)
+        with patch("app.main.initialize_worker", lambda *_args, **_kwargs: None):
+            app = create_app()
+            app.dependency_overrides[get_db] = get_test_db
+            return TestClient(app)
 
 
 def test_get_job_detail_success(client: TestClient, test_db_session):

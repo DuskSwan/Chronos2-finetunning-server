@@ -68,7 +68,10 @@ def isolated_app(test_settings: Settings, monkeypatch):
         return test_settings
 
     monkeypatch.setattr("app.db.session.SessionLocal", TestSessionLocal)
+    monkeypatch.setattr("app.workers.trainer_worker.SessionLocal", TestSessionLocal)
     monkeypatch.setattr("app.core.config.get_settings", mock_get_settings)
+    monkeypatch.setattr("app.main.get_settings", mock_get_settings)
+    monkeypatch.setattr("app.main.initialize_worker", lambda *_args, **_kwargs: None)
 
     app = create_app()
 
@@ -128,7 +131,6 @@ def test_cancel_queued_job_success(client: TestClient, isolated_app):
 def test_cancel_running_job_eventually_cancelled(
     client: TestClient,
     isolated_app,
-    monkeypatch,
     test_settings: Settings,
 ):
     """running 任务请求取消后最终状态为 cancelled。"""
@@ -158,11 +160,6 @@ def test_cancel_running_job_eventually_cancelled(
     data = response.json()
     assert data["status"] == "running"
     assert data["cancel_requested"] is True
-
-    import random
-
-    monkeypatch.setattr("app.workers.trainer_worker.time.sleep", lambda *_: None)
-    monkeypatch.setattr(random, "uniform", lambda *_: 0)
 
     worker = TrainerWorker(test_settings)
     worker._process_job(job_id)

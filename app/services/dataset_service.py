@@ -76,7 +76,9 @@ def prepare_input_data(
         target_columns=target_columns,
     )
     
-    array = df.values.transpose()  # 转置为 (num_variates, history_length)
+    # 转为可写的数值数组，避免非数值/只读数组导致训练失败
+    array = df.to_numpy(copy=True).astype("float32", copy=False)
+    array = array.transpose()  # 转置为 (num_variates, history_length)
     array = array[np.newaxis, :] # 增加 batch_size 维度，变为 (1, num_variates, history_length)
     
     return array

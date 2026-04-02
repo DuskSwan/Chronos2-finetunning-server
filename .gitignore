@@ -27,3 +27,4 @@ logs/
 .mypy_cache/
 .ruff_cache/
 
+chronos-2-finetuned/
