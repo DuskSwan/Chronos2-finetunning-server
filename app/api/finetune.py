@@ -104,6 +104,7 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         "output_root": request.output_root,
         "finetuned_ckpt_name": request.finetuned_ckpt_name,
         "device": request.device,
+        "selected_columns": request.selected_columns,
     }
 
 

@@ -24,6 +24,7 @@ class CreateFinetuneJobRequest(BaseModel):
                 "logging_steps": 100,
                 "finetuned_ckpt_name": "finetuned-ckpt",
                 "device": "cpu",
+                "selected_columns": ["target"],
             }
         }
     )
@@ -77,6 +78,10 @@ class CreateFinetuneJobRequest(BaseModel):
     device: str = Field(
         default="cpu",
         description="使用的设备: 'cpu' 或 'cuda'",
+    )
+    selected_columns: Optional[list[str]] = Field(
+        default=None,
+        description="指定要使用的 CSV/Parquet 列名列表（为空则使用全部列）",
     )
 
     @field_validator("train_data_path")
@@ -141,4 +146,17 @@ class CreateFinetuneJobRequest(BaseModel):
         """验证日志记录频率为正整数。"""
         if v <= 0:
             raise ValueError("日志记录频率必须是正整数")
+        return v
+
+    @field_validator("selected_columns")
+    @classmethod
+    def validate_selected_columns(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """验证 selected_columns 非空且无重复。"""
+        if v is None:
+            return v
+        if not v:
+            raise ValueError("selected_columns 不能为空")
+        unique = list(dict.fromkeys(v))
+        if len(unique) != len(v):
+            raise ValueError("selected_columns 不能包含重复项")
         return v

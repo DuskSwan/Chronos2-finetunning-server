@@ -4,23 +4,21 @@
 """
 
 import json
-
 import threading
-import time
 from typing import Optional
 
 from app.services.queue_service import get_job_queue
 from app.services.job_service import (
     start_job_training,
-    update_job_step,
     complete_job_training,
     fail_job_training,
 )
-from app.services.trainer_service import mock_train
+from app.services.trainer_service import train_chronos2
 from app.db.session import SessionLocal
 from app.db.crud import get_job_by_id, mark_job_cancelled
 from app.core.enums import JobStatus
 from app.core.config import Settings
+from app.callbacks.progress_callback import CancelledError
 
 
 from loguru import logger
@@ -113,67 +111,43 @@ class TrainerWorker:
             
             # 4. 准备训练配置
             train_config = {
-                "output_dir": job.output_dir,
+                "db": db,
                 "job_id": job_id,
-                **request_data,
+                "train_data_path": request_data.get("train_data_path"),
+                "val_data_path": request_data.get("val_data_path"),
+                "output_dir": job.output_dir,
+                "log_path": job.log_path,
+                "model_id": request_data.get("model_id"),
+                "prediction_length": request_data.get("prediction_length"),
+                "context_length": request_data.get("context_length"),
+                "finetune_mode": request_data.get("finetune_mode"),
+                "learning_rate": request_data.get("learning_rate"),
+                "num_steps": request_data.get("num_steps"),
+                "batch_size": request_data.get("batch_size"),
+                "logging_steps": request_data.get("logging_steps"),
+                "finetuned_ckpt_name": request_data.get("finetuned_ckpt_name"),
+                "device": request_data.get("device"),
+                "selected_columns": request_data.get("selected_columns"),
             }
-            
-            # 5. 执行假训练
-            max_steps = 5  # 假训练总步数
-            logger.info(f"开始模拟训练，总步数: {max_steps}")
-            
-            for step in range(1, max_steps + 1):
-                if not self._running:
-                    logger.info(f"任务 {job_id} 被中断")
-                    break
 
-                # 检查取消请求
-                db.expire_all()
-                job = get_job_by_id(db, job_id)
-                if job is None:
-                    logger.error(f"任务 {job_id} 在训练过程中丢失")
-                    return
-                if job.cancel_requested:
-                    mark_job_cancelled(db, job_id)
-                    logger.info(f"任务 {job_id} 检测到取消请求，已取消")
-                    return
-                
-                # 执行一步训练（耗时 0.2 ~ 0.5 秒）
-                import random
-                sleep_time = random.uniform(0.2, 0.5)
-                time.sleep(sleep_time)
-                
-                # 模拟损失值
-                loss = 1.0 - (step / max_steps) * 0.7 + random.uniform(-0.02, 0.02)
-                loss = max(loss, 0.1)
-                
-                # 更新进度
-                update_job_step(
-                    db=db,
-                    job_id=job_id,
-                    current_step=step,
-                    max_steps=max_steps,
-                    last_loss=loss,
-                )
-                logger.info(f"任务 {job_id} 进度: {step}/{max_steps}, 损失: {loss:.4f}")
-            
-            # 6. 调用完整的假训练器（可选，也可以跳过）
-            # model_path = mock_train(train_config, steps=max_steps)
-            
-            # 为演示目的，直接返回假的模型路径
-            model_path = f"{job.output_dir}/finetuned-ckpt"
-            
-            # 7. 标记为完成（若未取消）
+            # 5. 执行真实训练
+            logger.info(f"开始真实训练任务: {job_id}")
+            model_path = train_chronos2(**train_config)
+
+            # 6. 标记为完成（若未取消）
             db.expire_all()
             job = get_job_by_id(db, job_id)
             if job and job.cancel_requested:
                 mark_job_cancelled(db, job_id)
                 logger.info(f"任务 {job_id} 在完成前被取消")
                 return
-
+            
             complete_job_training(db, job_id, model_path)
             logger.info(f"任务 {job_id} 已完成，模型路径: {model_path}")
             
+        except CancelledError as e:
+            logger.info(f"任务 {job_id} 被取消: {e}")
+            mark_job_cancelled(db, job_id)
         except Exception as e:
             logger.error(f"任务 {job_id} 处理失败: {e}", exc_info=True)
             fail_job_training(db, job_id, str(e))

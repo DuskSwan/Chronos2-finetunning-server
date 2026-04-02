@@ -147,7 +147,8 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
     "logging_steps": 100,
     "output_root": "/custom/path",
     "finetuned_ckpt_name": "finetuned-ckpt",
-    "device": "cpu"
+    "device": "cpu",
+    "selected_columns": ["target"]
   }'
 ```
 
@@ -177,6 +178,7 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 | `output_root` | str \| null | null | 输出根目录（default: `./artifacts`） |
 | `finetuned_ckpt_name` | str | "finetuned-ckpt" | 微调模型保存名称 |
 | `device` | str | "cpu" | 设备：`"cpu"` 或 `"cuda"`（自动检测） |
+| `selected_columns` | list[str] \| null | null | 仅使用指定列（为空则使用全部列） |
 
 **任务状态说明**：
 
@@ -445,6 +447,7 @@ ts_model_train_and_finetune/
 | output_root | str | null | 否 | 输出根目录（为空则使用 artifacts 目录） |
 | finetuned_ckpt_name | str | finetuned-ckpt | 否 | 微调模型保存名称 |
 | device | str | cpu | 否 | 设备："cpu" 或 "cuda" |
+| selected_columns | list[str] \| null | null | 否 | 仅使用指定列（为空则使用全部列） |
 
 **响应 201：**
 
