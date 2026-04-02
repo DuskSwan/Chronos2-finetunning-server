@@ -163,7 +163,7 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 **参数说明**：
 
 | 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
+| ---- | ---- | ------ | ---- |
 | `train_data_path` | str | **必需** | 训练数据文件路径（CSV 或 Parquet） |
 | `val_data_path` | str \| null | null | 验证数据文件路径（可选） |
 | `prediction_length` | int | **必需** | 预测长度（时间步） |
@@ -188,34 +188,33 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 
 ### 支持的数据格式
 
-#### CSV 格式
+当前版本的数据读取逻辑是：读取表格 →（可选）按 `selected_columns` 选择列 → 转为 `float32` 数组。
+因此数据格式需要满足下面要求：
 
-最小字段（列）：
+- 支持 CSV / Parquet
+- 每一列被视为一个变量（variates），每一行是一个时间步
+- 所选列必须是数值列（否则转换为 `float32` 会失败）
+- 若未传 `selected_columns`，将使用全部列
+- 当前版本不会解析 `item_id` / `timestamp` 等长表字段；若有这些列，请在上传前转换为“宽表”或用 `selected_columns` 排除
+
+#### CSV 示例（宽表）
 
 ```csv
-item_id,timestamp,target
-item1,2024-01-01,100.5
-item1,2024-01-02,101.3
-item2,2024-01-01,200.1
-item2,2024-01-02,202.5
-...
+value1,value2,value3
+100.5,200.1,300.0
+101.3,202.5,299.6
+99.8,201.2,301.4
 ```
-
-- `item_id`: 时序标识符（同一 item 的数据点会视为一个连续时序）
-- `timestamp`: 时间戳（按此排序，格式任意但要能被 Pandas 识别）
-- `target`: 目标值（预测对象）
-
-> 当前版本使用硬编码的列名，后续版本可支持自定义列名。
 
 #### Parquet 格式
 
-与 CSV 相同的列结构。Pandas 会自动解析 Parquet 文件。
+与 CSV 相同的列结构（宽表、数值列）。Pandas 会自动解析 Parquet 文件。
 
 ### 查询任务状态
 
 当前版本已支持任务查询接口，包括详情、结果和日志：
 
-**1) 查询任务详情**
+1) 查询任务详情
 
 ```bash
 curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>
@@ -241,7 +240,7 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>
 }
 ```
 
-**2) 查询任务结果（仅完成后可用）**
+1) 查询任务结果（仅完成后可用）
 
 ```bash
 curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/result
@@ -259,7 +258,7 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/result
 }
 ```
 
-**3) 查询任务日志（支持 tail）**
+1) 查询任务日志（支持 tail）
 
 ```bash
 # 返回完整日志
@@ -269,7 +268,7 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/logs
 curl "http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/logs?tail=200"
 ```
 
-**4) 任务列表（可选）**
+1) 任务列表（可选）
 
 ```bash
 curl "http://127.0.0.1:8000/v1/finetune/jobs?limit=20"
@@ -299,7 +298,7 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/cancel
 }
 ```
 
-**result 接口与 detail 接口的区别**
+result 接口与 detail 接口的区别
 
 - `detail`（`/v1/finetune/jobs/{job_id}`）：用于查询任务实时状态、进度和错误信息，任何状态都可用。
 - `result`（`/v1/finetune/jobs/{job_id}/result`）：仅在任务完成后返回模型输出与指标，否则返回 4xx。
@@ -308,7 +307,7 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/cancel
 
 任务创建后，会在 `artifacts/` 下生成以下结构：
 
-```
+```txt
 artifacts/
 └── <job_id>/
     ├── request.json          # 保存的请求参数
@@ -392,7 +391,7 @@ ts_model_train_and_finetune/
 `finetune_jobs` 表存储任务元数据，字段如下：
 
 | 字段 | 类型 | 可空 | 默认值 |
-|------|------|------|--------|
+| ---- | ---- | ---- | ------ |
 | id | VARCHAR(36) | 否 | - |
 | status | VARCHAR(20) | 否 | "queued" |
 | request_json | TEXT | 否 | - |
@@ -429,7 +428,7 @@ ts_model_train_and_finetune/
 **请求体参数：**
 
 | 字段 | 类型 | 默认值 | 必需 | 说明 |
-|------|------|--------|------|------|
+| ---- | ---- | ------ | ---- | ---- |
 | train_data_path | str | - | **是** | 训练数据路径 |
 | val_data_path | str | null | 否 | 验证数据路径 |
 | prediction_length | int | - | **是** | 预测长度（必须为正整数） |
@@ -600,12 +599,14 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 ## 项目进度
 
 **第 1 步（已完成）**：创建任务接口，仅入库，不启动训练
+
 - ✅ 参数校验
 - ✅ 数据库入库
 - ✅ 产物目录管理
 - ✅ 返回 job_id
 
 **第 2 步（已完成）**：异步训练过程（使用假训练器）
+
 - ✅ 本地内存队列
 - ✅ 后台 worker 线程
 - ✅ 任务自动入队和消费
@@ -613,6 +614,7 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 - ✅ 进度跟踪
 
 **第 3 步（已完成）**：接入真实 Chronos-2 微调并实现 callback
+
 - ✅ 真实模型加载和微调
 - ✅ 数据集格式支持（CSV/Parquet）
 - ✅ 自定义 callback 机制
@@ -620,16 +622,12 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 - ✅ 模型保存
 
 **第 4 步（已完成）**：任务查询接口
+
 - ✅ 任务查询端点（详情 / 结果 / 日志）
 
-**第 5 步（进行中）**：取消与辅助接口
-- ✅ 任务取消接口（协作式取消）
-- ⏳ 进度流式查询
+**第 5 步（已完成）**：取消与辅助接口
 
-**第 6 步（规划中）**：分布式和性能优化
-- ⏳ 多 GPU 训练支持
-- ⏳ 分布式 worker
-- ⏳ 模型评估和验证指标
+- ✅ 任务取消接口（协作式取消）
 
 ## 许可证
 
