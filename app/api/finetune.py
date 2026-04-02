@@ -148,10 +148,11 @@ async def create_finetune_job(
     job_output_dir = output_root / job_id
     ensure_dir(job_output_dir)
     
-    # 写入 request.json
-    request_json_path = job_output_dir / "request.json"
-    with open(request_json_path, "w") as f:
-        json.dump(validated_params, f, indent=2)
+    # 写入 request.json（可配置关闭）
+    if settings.save_request_artifacts:
+        request_json_path = job_output_dir / "request.json"
+        with open(request_json_path, "w") as f:
+            json.dump(validated_params, f, indent=2)
     
     # 定义日志路径
     log_path = job_output_dir / "train.log"

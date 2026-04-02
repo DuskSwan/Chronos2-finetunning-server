@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # 路径
     artifacts_root: str = "./artifacts"
     logs_root: str = "./logs"
+    save_request_artifacts: bool = True
     
     # 模型
     default_model_id: str = "amazon/chronos-2"

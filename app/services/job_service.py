@@ -63,10 +63,11 @@ def create_finetune_job(
     logs_dir.mkdir(parents=True, exist_ok=True)
     log_path = str(logs_dir / "train.log")
     
-    # 保存请求 JSON
-    request_json_path = output_dir / "request.json"
-    with open(request_json_path, "w", encoding="utf-8") as f:
-        json.dump(request_data, f, indent=2, ensure_ascii=False)
+    # 保存请求 JSON（可配置关闭）
+    if settings.save_request_artifacts:
+        request_json_path = output_dir / "request.json"
+        with open(request_json_path, "w", encoding="utf-8") as f:
+            json.dump(request_data, f, indent=2, ensure_ascii=False)
     
     # 创建数据库记录
     db = SessionLocal()
