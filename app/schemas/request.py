@@ -12,7 +12,6 @@ class CreateFinetuneJobRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "model_id": "amazon/chronos-2",
                 "train_data_path": "/path/to/train.csv",
                 "val_data_path": "/path/to/val.csv",
                 "prediction_length": 96,
@@ -29,10 +28,6 @@ class CreateFinetuneJobRequest(BaseModel):
         }
     )
     
-    model_id: str = Field(
-        default="amazon/chronos-2",
-        description="模型标识符",
-    )
     train_data_path: str = Field(
         description="训练数据文件路径",
     )

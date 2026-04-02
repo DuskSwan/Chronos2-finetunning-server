@@ -3,8 +3,6 @@
 """
 
 from pathlib import Path
-from typing import Optional
-
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,7 +26,6 @@ class Settings(BaseSettings):
     logs_root: str = "./logs"
 
     # 模型
-    default_model_id: str = "amazon/chronos-2"
     raw_model_cache_dir: str = "./data/model_cache"
 
     # 开关

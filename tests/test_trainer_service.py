@@ -161,7 +161,6 @@ class TestTrainerService:
             val_data_path=None,
             output_dir=output_dir,
             log_path=log_path,
-            model_id="amazon/chronos-2",
             prediction_length=1,
             context_length=2,
             finetune_mode="lora",

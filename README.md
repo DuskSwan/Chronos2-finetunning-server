@@ -135,7 +135,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
   -H "Content-Type: application/json" \
   -d '{
-    "model_id": "amazon/chronos-2",
     "train_data_path": "/path/to/train.csv",
     "val_data_path": "/path/to/val.csv",
     "prediction_length": 96,
@@ -165,7 +164,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `model_id` | str | "amazon/chronos-2" | 微调的基础模型 ID |
 | `train_data_path` | str | **必需** | 训练数据文件路径（CSV 或 Parquet） |
 | `val_data_path` | str \| null | null | 验证数据文件路径（可选） |
 | `prediction_length` | int | **必需** | 预测长度（时间步） |
@@ -337,8 +335,6 @@ SQLITE_DB_PATH=./data/finetune.db
 ARTIFACTS_ROOT=./artifacts
 LOGS_ROOT=./logs
 
-# 模型
-DEFAULT_MODEL_ID=amazon/chronos-2
 ```
 
 ## 目录结构
@@ -434,7 +430,6 @@ ts_model_train_and_finetune/
 
 | 字段 | 类型 | 默认值 | 必需 | 说明 |
 |------|------|--------|------|------|
-| model_id | str | amazon/chronos-2 | 否 | 模型 ID |
 | train_data_path | str | - | **是** | 训练数据路径 |
 | val_data_path | str | null | 否 | 验证数据路径 |
 | prediction_length | int | - | **是** | 预测长度（必须为正整数） |

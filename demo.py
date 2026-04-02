@@ -60,7 +60,6 @@ def demo() -> None:
     # 2. Create Job (mock_train_data.csv + selected_columns)
     print("\n[2] Create Fine-tuning Job")
     payload = {
-        "model_id": "amazon/chronos-2",
         "train_data_path": str(DATA_FILE),
         "prediction_length": 1,
         "context_length": 2,

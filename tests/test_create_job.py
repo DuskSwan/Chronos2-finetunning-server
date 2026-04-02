@@ -91,7 +91,6 @@ def test_health_check(client):
 def test_create_finetune_job_success(client, test_settings):
     """Test successful fine-tuning job creation."""
     request_data = {
-        "model_id": "amazon/chronos-2",
         "train_data_path": "/path/to/train.csv",
         "val_data_path": "/path/to/val.csv",
         "prediction_length": 96,
@@ -125,7 +124,6 @@ def test_create_finetune_job_success(client, test_settings):
 def test_create_finetune_job_missing_required_field(client):
     """Test job creation with missing required field."""
     request_data = {
-        "model_id": "amazon/chronos-2",
         # Missing train_data_path
         "prediction_length": 96,
     }
@@ -177,7 +175,6 @@ def test_create_finetune_job_creates_task_directory(client, test_settings):
     artifacts_dir.mkdir(exist_ok=True)
     
     request_data = {
-        "model_id": "amazon/chronos-2",
         "train_data_path": "/path/to/train.csv",
         "prediction_length": 96,
         "output_root": str(artifacts_dir),
@@ -209,7 +206,6 @@ def test_create_finetune_job_writes_to_database(client, test_db_session):
     from app.db.crud import get_job_by_id
     
     request_data = {
-        "model_id": "amazon/chronos-2",
         "train_data_path": "/path/to/train.csv",
         "prediction_length": 96,
     }

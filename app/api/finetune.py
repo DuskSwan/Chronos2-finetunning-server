@@ -91,7 +91,6 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         )
     
     return {
-        "model_id": request.model_id,
         "train_data_path": request.train_data_path,
         "val_data_path": request.val_data_path,
         "prediction_length": request.prediction_length,

@@ -117,7 +117,6 @@ class TrainerWorker:
                 "val_data_path": request_data.get("val_data_path"),
                 "output_dir": job.output_dir,
                 "log_path": job.log_path,
-                "model_id": request_data.get("model_id"),
                 "prediction_length": request_data.get("prediction_length"),
                 "context_length": request_data.get("context_length"),
                 "finetune_mode": request_data.get("finetune_mode"),
