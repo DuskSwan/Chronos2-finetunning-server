@@ -141,7 +141,7 @@ def update_job_progress(
     db: Session,
     job_id: str,
     current_step: int,
-    max_steps: int,
+    max_steps: Optional[int] = None,
     last_loss: Optional[float] = None,
 ) -> Optional[FinetuneJob]:
     """
@@ -151,7 +151,7 @@ def update_job_progress(
         db: 数据库会话
         job_id: 任务 ID
         current_step: 当前步数
-        max_steps: 总步数
+        max_steps: 总步数（可选）
         last_loss: 最新损失值
     
     返回：
@@ -162,7 +162,8 @@ def update_job_progress(
         return None
     
     job.current_step = current_step
-    job.max_steps = max_steps
+    if max_steps is not None:
+        job.max_steps = max_steps
     if last_loss is not None:
         job.last_loss = last_loss
     

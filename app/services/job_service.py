@@ -334,6 +334,7 @@ def request_cancel_job(db: Any, job_id: str) -> CancelJobResponse:
 
     if job.status == JobStatus.queued.value:
         cancelled_job = mark_job_cancelled(db, job_id)
+        assert cancelled_job, "job_id此时必然存在"
         return CancelJobResponse(
             job_id=cancelled_job.id,
             status=cancelled_job.status,
@@ -343,6 +344,7 @@ def request_cancel_job(db: Any, job_id: str) -> CancelJobResponse:
 
     if job.status == JobStatus.running.value:
         updated_job = set_cancel_requested(db, job_id, True)
+        assert updated_job, "job_id此时必然存在"
         return CancelJobResponse(
             job_id=updated_job.id,
             status=updated_job.status,

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Generator
 
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
@@ -19,7 +20,7 @@ def get_db_url(db_path: Path) -> str:
     return f"sqlite:///{db_path.as_posix()}"
 
 
-def create_session_factory(db_url: str) -> sessionmaker:
+def create_session_factory(db_url: str) -> tuple[sessionmaker,Engine]:
     """创建 SQLAlchemy 会话工厂。"""
     engine = create_engine(
         db_url,
