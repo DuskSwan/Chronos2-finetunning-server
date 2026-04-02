@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from app.callbacks.progress_callback import ProgressCallback, CancelledError
 from app.services.dataset_service import prepare_input_data
+from app.services.model_service import load_local_model
 
+from chronos import BaseChronosPipeline, Chronos2Pipeline
 
 from loguru import logger
 
@@ -24,7 +26,6 @@ def train_chronos2(
     val_data_path: Optional[str],
     output_dir: str,
     log_path: str,
-    model_id: str = "amazon/chronos-2",
     prediction_length: int = 96,
     context_length: int = 512,
     finetune_mode: Literal['full', 'lora'] = "lora",
@@ -49,7 +50,6 @@ def train_chronos2(
         val_data_path: 验证数据文件路径（可选）。
         output_dir: 输出目录。
         log_path: 日志文件路径。
-        model_id: 模型标识符（默认 "amazon/chronos-2"）。
         prediction_length: 预测长度。
         context_length: 上下文长度（默认 512）。
         finetune_mode: 微调模式（"lora" 或 "full"，默认 "lora"）。
@@ -72,8 +72,7 @@ def train_chronos2(
     # 记录开始
     logger.info(
         f"开始 Chronos-2 微调训练"
-        f" (job={job_id}, model={model_id}, "
-        f"finetune_mode={finetune_mode})"
+        f" (job={job_id}, finetune_mode={finetune_mode})"
     )
 
     # 准备输出目录
@@ -136,20 +135,13 @@ def train_chronos2(
             callback._write_log("使用 CPU 进行训练")
 
         # 4. 加载 Chronos-2 模型
-        logger.info(f"加载模型: {model_id}")
-        callback._write_log(f"加载模型: {model_id}")
+        callback._write_log(f"加载base模型")
         callback.check_cancel_requested()
 
-        from chronos import BaseChronosPipeline, Chronos2Pipeline
-
         # 使用上下文管理器自动处理设备
-        pipeline: Chronos2Pipeline = BaseChronosPipeline.from_pretrained(
-            model_id,
-            device_map=use_device,
-            dtype="float32",
-        )
+        pipeline: Chronos2Pipeline = load_local_model(device=use_device)
 
-        logger.info(f"模型加载成功: {model_id}")
+        logger.info(f"base模型加载成功")
         callback._write_log(f"模型加载成功")
 
         # 5. 调用 fit() 方法进行微调

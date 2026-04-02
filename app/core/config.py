@@ -5,14 +5,16 @@
 from pathlib import Path
 from typing import Optional
 
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """应用设置。"""
     
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config: SettingsConfigDict = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
     
     # 服务器
     host: str = "127.0.0.1"
@@ -24,10 +26,13 @@ class Settings(BaseSettings):
     # 路径
     artifacts_root: str = "./artifacts"
     logs_root: str = "./logs"
-    save_request_artifacts: bool = True
-    
+
     # 模型
     default_model_id: str = "amazon/chronos-2"
+    raw_model_cache_dir: str = "./data/model_cache"
+
+    # 开关
+    save_request_artifacts: bool = True # 是否保存请求 JSON 到产物目录 
     
     @property
     def sqlite_db_path_resolved(self) -> Path:
