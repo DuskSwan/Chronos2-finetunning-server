@@ -89,11 +89,14 @@ pip install -e ".[dev]"
 ### 启动服务
 
 ```bash
-# 直接使用 uvicorn
+# 方式 A：直接使用 uvicorn（端口不会读取 .env，需手动指定）
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 
-# 或使用 python -m
+# 方式 B：用 python -m uvicorn 启动（同样需要手动指定端口）
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+
+# 方式 C：使用项目内的启动入口（会读取 .env 中的 HOST/PORT）
+python -m app.main
 ```
 
 服务启动时会自动：

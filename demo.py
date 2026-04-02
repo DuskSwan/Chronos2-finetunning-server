@@ -9,7 +9,10 @@ from pathlib import Path
 
 import requests
 
-BASE_URL = "http://127.0.0.1:8000"
+from app.core.config import Settings
+
+PORT = Settings.port
+BASE_URL = f"http://127.0.0.1:{PORT}"
 DATA_FILE = Path("mock_train_data.csv").resolve()
 SELECTED_COLUMNS = ["value1", "value2", "value3"]
 
