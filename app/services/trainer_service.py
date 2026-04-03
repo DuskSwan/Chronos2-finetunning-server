@@ -5,6 +5,7 @@
 
 
 import json
+import inspect
 from pathlib import Path
 from typing import Any, Dict, Optional, Literal
 
@@ -169,19 +170,32 @@ def train_chronos2(
 
         callback_adapter = ChronosCallbackAdapter(callback)
 
-        # 调用微调
-        fine_tuned_pipeline = pipeline.fit(
-            train_inputs,
+        # 调用微调（兼容不同版本的 Chronos-2 fit() 签名）
+        fit_kwargs: Dict[str, Any] = dict(
+            inputs=train_inputs,
             validation_inputs=validation_inputs,
             batch_size=batch_size,
             learning_rate=learning_rate,
             num_steps=num_steps,
             prediction_length=prediction_length,
             context_length=context_length,
-            finetune_mode=finetune_mode,
             logging_steps=logging_steps,
-            # Note: 根据 Chronos-2 的实际 fit() 签名调整
+            # Note: extra kwargs 会进入 TrainingArguments
         )
+
+        supports_finetune_mode = "finetune_mode" in inspect.signature(pipeline.fit).parameters
+        if supports_finetune_mode:
+            fit_kwargs["finetune_mode"] = finetune_mode
+        else:
+            if finetune_mode != "full":
+                msg = (
+                    "当前 Chronos 版本的 fit() 不支持 finetune_mode，"
+                    "将忽略该参数并使用全量微调。"
+                )
+                logger.warning(msg)
+                callback._write_log(f"警告: {msg}")
+
+        fine_tuned_pipeline = pipeline.fit(**fit_kwargs)
 
         # 6. 保存微调后的模型
         model_save_path = output_dir_path / finetuned_ckpt_name
