@@ -101,7 +101,6 @@ def test_create_finetune_job_success(client, test_settings):
         "batch_size": 32,
         "logging_steps": 100,
         "finetuned_ckpt_name": "finetuned-ckpt",
-        "device": "cpu",
     }
     
     response = client.post("/v1/finetune/jobs", json=request_data)

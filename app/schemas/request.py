@@ -22,7 +22,6 @@ class CreateFinetuneJobRequest(BaseModel):
                 "batch_size": 32,
                 "logging_steps": 100,
                 "finetuned_ckpt_name": "finetuned-ckpt",
-                "device": "cpu",
                 "selected_columns": ["target"],
             }
         }
@@ -69,10 +68,6 @@ class CreateFinetuneJobRequest(BaseModel):
     finetuned_ckpt_name: str = Field(
         default="finetuned-ckpt",
         description="微调检查点的名称",
-    )
-    device: str = Field(
-        default="cpu",
-        description="使用的设备: 'cpu' 或 'cuda'",
     )
     selected_columns: Optional[list[str]] = Field(
         default=None,

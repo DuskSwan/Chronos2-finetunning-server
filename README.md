@@ -155,7 +155,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
     "logging_steps": 100,
     "output_root": "/custom/path",
     "finetuned_ckpt_name": "finetuned-ckpt",
-    "device": "cpu",
     "selected_columns": ["target"]
   }'
 ```
@@ -184,7 +183,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 | `logging_steps` | int | 100 | 日志间隔（步） |
 | `output_root` | str \| null | null | 输出根目录（default: `./artifacts`） |
 | `finetuned_ckpt_name` | str | "finetuned-ckpt" | 微调模型保存名称 |
-| `device` | str | "cpu" | 设备：`"cpu"` 或 `"cuda"`（自动检测） |
 | `selected_columns` | list[str] \| null | null | 仅使用指定列（为空则使用全部列） |
 
 **任务状态说明**：
@@ -343,7 +341,12 @@ SQLITE_DB_PATH=./data/finetune.db
 ARTIFACTS_ROOT=./artifacts
 LOGS_ROOT=./logs
 
+# 设备
+DEVICE=cpu
+
 ```
+
+> 训练使用的设备统一由 `DEVICE` 配置控制，API 请求不再接收 `device` 参数。
 
 ## 目录结构
 
@@ -458,7 +461,6 @@ Content-Type: `application/json`
 | logging_steps | int | 100 | 否 | 日志间隔（正整数） |
 | output_root | str \| null | null | 否 | 输出根目录（为空则用 `./artifacts`） |
 | finetuned_ckpt_name | str | finetuned-ckpt | 否 | 模型保存目录名 |
-| device | str | cpu | 否 | `"cpu"` 或 `"cuda"` |
 | selected_columns | list[str] \| null | null | 否 | 使用指定列；不传则使用全部列 |
 
 响应 201:

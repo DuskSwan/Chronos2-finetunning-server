@@ -125,7 +125,7 @@ class TrainerWorker:
                 "batch_size": request_data.get("batch_size"),
                 "logging_steps": request_data.get("logging_steps"),
                 "finetuned_ckpt_name": request_data.get("finetuned_ckpt_name"),
-                "device": request_data.get("device"),
+                "device": self.settings.device,
                 "selected_columns": request_data.get("selected_columns"),
             }
 

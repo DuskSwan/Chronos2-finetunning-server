@@ -102,7 +102,6 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         "logging_steps": request.logging_steps,
         "output_root": request.output_root,
         "finetuned_ckpt_name": request.finetuned_ckpt_name,
-        "device": request.device,
         "selected_columns": request.selected_columns,
     }
 
@@ -139,6 +138,9 @@ async def create_finetune_job(
     
     # 获取设置
     settings = get_settings()
+
+    # 设备统一从配置读取，不再从请求传入
+    validated_params["device"] = settings.device
     
     # 确定输出根目录
     output_root = Path(validated_params["output_root"]) if validated_params["output_root"] else settings.artifacts_root_resolved

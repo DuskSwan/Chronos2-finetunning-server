@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     # 模型
     raw_model_cache_dir: str = "./data/model_cache"
+    device: str = "cpu"
 
     # 开关
     save_request_artifacts: bool = True # 是否保存请求 JSON 到产物目录 

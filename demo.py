@@ -72,7 +72,6 @@ def demo() -> None:
         "batch_size": 1,
         "logging_steps": 1,
         "finetuned_ckpt_name": "finetuned-ckpt",
-        "device": "cpu",
         "selected_columns": SELECTED_COLUMNS,
     }
     print("POST /v1/finetune/jobs")
