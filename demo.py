@@ -70,8 +70,6 @@ def demo() -> None:
         "learning_rate": 1e-4,
         "num_steps": 1,
         "batch_size": 1,
-        "logging_steps": 1,
-        "finetuned_ckpt_name": "finetuned-ckpt",
         "selected_columns": SELECTED_COLUMNS,
     }
     print("POST /v1/finetune/jobs")

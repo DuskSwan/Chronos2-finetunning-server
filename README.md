@@ -152,8 +152,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
     "learning_rate": 0.0001,
     "num_steps": 1000,
     "batch_size": 32,
-    "logging_steps": 100,
-    "finetuned_ckpt_name": "finetuned-ckpt",
     "selected_columns": ["target"]
   }'
 ```
@@ -179,8 +177,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 | `learning_rate` | float | 1e-4 | 学习率 |
 | `num_steps` | int | 1000 | 训练总步数 |
 | `batch_size` | int | 32 | 批处理大小 |
-| `logging_steps` | int | 100 | 日志间隔（步） |
-| `finetuned_ckpt_name` | str | "finetuned-ckpt" | 微调模型保存名称 |
 | `selected_columns` | list[str] \| null | null | 仅使用指定列（为空则使用全部列） |
 
 **任务状态说明**：
@@ -348,9 +344,13 @@ LOGS_ROOT=./logs
 # 设备
 DEVICE=cpu
 
+# 训练
+LOGGING_STEPS=100
+FINETUNED_CKPT_NAME=finetuned-ckpt
+
 ```
 
-> 训练使用的设备统一由 `DEVICE` 配置控制，API 请求不再接收 `device` 参数。
+> 训练使用的设备与日志频率、模型保存名称统一由配置控制，API 请求不再接收 `device` / `logging_steps` / `finetuned_ckpt_name` 参数。
 
 ## 目录结构
 
@@ -462,8 +462,6 @@ Content-Type: `application/json`
 | learning_rate | float | 0.0001 | 否 | 学习率（正数） |
 | num_steps | int | 1000 | 否 | 训练总步数（正整数） |
 | batch_size | int | 32 | 否 | 批处理大小（正整数） |
-| logging_steps | int | 100 | 否 | 日志间隔（正整数） |
-| finetuned_ckpt_name | str | finetuned-ckpt | 否 | 模型保存目录名 |
 | selected_columns | list[str] \| null | null | 否 | 使用指定列；不传则使用全部列 |
 
 响应 201:

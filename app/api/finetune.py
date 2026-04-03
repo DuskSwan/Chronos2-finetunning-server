@@ -75,7 +75,6 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         ("context_length", request.context_length),
         ("num_steps", request.num_steps),
         ("batch_size", request.batch_size),
-        ("logging_steps", request.logging_steps),
     ]:
         if value <= 0:
             raise HTTPException(
@@ -99,8 +98,6 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         "learning_rate": request.learning_rate,
         "num_steps": request.num_steps,
         "batch_size": request.batch_size,
-        "logging_steps": request.logging_steps,
-        "finetuned_ckpt_name": request.finetuned_ckpt_name,
         "selected_columns": request.selected_columns,
     }
 
@@ -140,6 +137,8 @@ async def create_finetune_job(
 
     # 设备统一从配置读取，不再从请求传入
     validated_params["device"] = settings.device
+    validated_params["logging_steps"] = settings.logging_steps
+    validated_params["finetuned_ckpt_name"] = settings.finetuned_ckpt_name
     
     # 创建任务输出目录
     job_output_dir = settings.artifacts_root_resolved / job_id

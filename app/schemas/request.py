@@ -20,8 +20,6 @@ class CreateFinetuneJobRequest(BaseModel):
                 "learning_rate": 0.0001,
                 "num_steps": 1000,
                 "batch_size": 32,
-                "logging_steps": 100,
-                "finetuned_ckpt_name": "finetuned-ckpt",
                 "selected_columns": ["target"],
             }
         }
@@ -56,14 +54,6 @@ class CreateFinetuneJobRequest(BaseModel):
     batch_size: int = Field(
         default=32,
         description="训练批大小",
-    )
-    logging_steps: int = Field(
-        default=100,
-        description="日志记录频率（步数）",
-    )
-    finetuned_ckpt_name: str = Field(
-        default="finetuned-ckpt",
-        description="微调检查点的名称",
     )
     selected_columns: Optional[list[str]] = Field(
         default=None,
@@ -124,14 +114,6 @@ class CreateFinetuneJobRequest(BaseModel):
         """验证批大小为正整数。"""
         if v <= 0:
             raise ValueError("批大小必须是正整数")
-        return v
-
-    @field_validator("logging_steps")
-    @classmethod
-    def validate_logging_steps(cls, v: int) -> int:
-        """验证日志记录频率为正整数。"""
-        if v <= 0:
-            raise ValueError("日志记录频率必须是正整数")
         return v
 
     @field_validator("selected_columns")

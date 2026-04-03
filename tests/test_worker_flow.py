@@ -259,7 +259,6 @@ def test_job_completes(client: TestClient, isolated_app, test_settings: Settings
             "context_length": 2,
             "num_steps": 1,
             "batch_size": 1,
-            "logging_steps": 1,
             "selected_columns": ["target"],
         },
     )
@@ -295,7 +294,6 @@ def test_job_progress_tracked(client: TestClient, isolated_app, test_settings: S
             "context_length": 2,
             "num_steps": 1,
             "batch_size": 1,
-            "logging_steps": 1,
             "selected_columns": ["target"],
         },
     )

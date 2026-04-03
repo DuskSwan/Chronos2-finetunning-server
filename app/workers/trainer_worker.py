@@ -123,8 +123,8 @@ class TrainerWorker:
                 "learning_rate": request_data.get("learning_rate"),
                 "num_steps": request_data.get("num_steps"),
                 "batch_size": request_data.get("batch_size"),
-                "logging_steps": request_data.get("logging_steps"),
-                "finetuned_ckpt_name": request_data.get("finetuned_ckpt_name"),
+                "logging_steps": self.settings.logging_steps,
+                "finetuned_ckpt_name": self.settings.finetuned_ckpt_name,
                 "device": self.settings.device,
                 "selected_columns": request_data.get("selected_columns"),
             }

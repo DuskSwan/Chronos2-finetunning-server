@@ -99,8 +99,6 @@ def test_create_finetune_job_success(client, test_settings):
         "learning_rate": 0.0001,
         "num_steps": 1000,
         "batch_size": 32,
-        "logging_steps": 100,
-        "finetuned_ckpt_name": "finetuned-ckpt",
     }
     
     response = client.post("/v1/finetune/jobs", json=request_data)
