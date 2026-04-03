@@ -55,7 +55,7 @@ Callback 更新进度 → 保存模型 → 更新状态
 - **任务队列**：基于 Python 标准库 `queue.Queue`（易后续扩展为 RabbitMQ/Redis）
 - **数据库**：SQLite + SQLAlchemy ORM
 - **API 框架**：FastAPI + Uvicorn
-- **模型库**：chronos-forecasting 2.1.0
+- **模型库**：chronos-forecasting 2.2.2（LoRA 需安装 peft）
 - **数据处理**：Pandas + PyArrow
 
 ## 需求
@@ -98,6 +98,12 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 # 方式 C：使用项目内的启动入口（会读取 .env 中的 HOST/PORT）
 python -m app.main
 ```
+
+**部署到服务器并允许远程访问时：**
+
+- 将 `HOST` 设为 `0.0.0.0`（监听所有网卡）。
+- 仅本机访问则保持 `127.0.0.1`。
+- 对外访问时请配合防火墙/反向代理限制来源。
 
 服务启动时会自动：
 
