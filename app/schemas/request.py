@@ -61,10 +61,6 @@ class CreateFinetuneJobRequest(BaseModel):
         default=100,
         description="日志记录频率（步数）",
     )
-    output_root: Optional[str] = Field(
-        default=None,
-        description="输出根目录（如果为 null 则使用配置默认值）",
-    )
     finetuned_ckpt_name: str = Field(
         default="finetuned-ckpt",
         description="微调检查点的名称",

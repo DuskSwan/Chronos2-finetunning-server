@@ -153,7 +153,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
     "num_steps": 1000,
     "batch_size": 32,
     "logging_steps": 100,
-    "output_root": "/custom/path",
     "finetuned_ckpt_name": "finetuned-ckpt",
     "selected_columns": ["target"]
   }'
@@ -181,7 +180,6 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 | `num_steps` | int | 1000 | 训练总步数 |
 | `batch_size` | int | 32 | 批处理大小 |
 | `logging_steps` | int | 100 | 日志间隔（步） |
-| `output_root` | str \| null | null | 输出根目录（default: `./artifacts`） |
 | `finetuned_ckpt_name` | str | "finetuned-ckpt" | 微调模型保存名称 |
 | `selected_columns` | list[str] \| null | null | 仅使用指定列（为空则使用全部列） |
 
@@ -242,7 +240,7 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>
     "last_loss": 0.5321
   },
   "error_message": null,
-  "log_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/train.log",
+  "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
   "model_path": null
 }
 ```
@@ -318,11 +316,17 @@ result 接口与 detail 接口的区别
 artifacts/
 └── <job_id>/
     ├── request.json          # 保存的请求参数
-    ├── train.log             # 训练日志（实时写入）
     └── finetuned-ckpt/       # 微调后的模型（训练完成后）
         ├── model.pt
         ├── config.json
         └── ...
+```
+
+训练日志统一保存在 `LOGS_ROOT` 下：
+
+```txt
+logs/
+└── <job_id>.log
 ```
 
 ## 配置
@@ -459,7 +463,6 @@ Content-Type: `application/json`
 | num_steps | int | 1000 | 否 | 训练总步数（正整数） |
 | batch_size | int | 32 | 否 | 批处理大小（正整数） |
 | logging_steps | int | 100 | 否 | 日志间隔（正整数） |
-| output_root | str \| null | null | 否 | 输出根目录（为空则用 `./artifacts`） |
 | finetuned_ckpt_name | str | finetuned-ckpt | 否 | 模型保存目录名 |
 | selected_columns | list[str] \| null | null | 否 | 使用指定列；不传则使用全部列 |
 
@@ -512,7 +515,7 @@ Content-Type: `application/json`
     "last_loss": 0.5321
   },
   "error_message": null,
-  "log_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/train.log",
+  "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
   "model_path": null
 }
 ```

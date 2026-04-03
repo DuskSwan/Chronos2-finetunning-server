@@ -170,20 +170,16 @@ def test_create_finetune_job_invalid_prediction_length(client):
 
 def test_create_finetune_job_creates_task_directory(client, test_settings):
     """Test that job creation creates task directory and request.json."""
-    artifacts_dir = Path(test_settings.artifacts_root)
-    artifacts_dir.mkdir(exist_ok=True)
-    
     request_data = {
         "train_data_path": "/path/to/train.csv",
         "prediction_length": 96,
-        "output_root": str(artifacts_dir),
     }
     
     response = client.post("/v1/finetune/jobs", json=request_data)
     assert response.status_code == 201
     
     job_id = response.json()["job_id"]
-    job_dir = artifacts_dir / job_id
+    job_dir = Path(test_settings.artifacts_root) / job_id
     
     # Check if directory was created
     assert job_dir.exists()

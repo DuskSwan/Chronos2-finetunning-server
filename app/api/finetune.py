@@ -100,7 +100,6 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         "num_steps": request.num_steps,
         "batch_size": request.batch_size,
         "logging_steps": request.logging_steps,
-        "output_root": request.output_root,
         "finetuned_ckpt_name": request.finetuned_ckpt_name,
         "selected_columns": request.selected_columns,
     }
@@ -142,11 +141,8 @@ async def create_finetune_job(
     # 设备统一从配置读取，不再从请求传入
     validated_params["device"] = settings.device
     
-    # 确定输出根目录
-    output_root = Path(validated_params["output_root"]) if validated_params["output_root"] else settings.artifacts_root_resolved
-    
     # 创建任务输出目录
-    job_output_dir = output_root / job_id
+    job_output_dir = settings.artifacts_root_resolved / job_id
     ensure_dir(job_output_dir)
     
     # 写入 request.json（可配置关闭）
@@ -155,8 +151,8 @@ async def create_finetune_job(
         with open(request_json_path, "w") as f:
             json.dump(validated_params, f, indent=2)
     
-    # 定义日志路径
-    log_path = job_output_dir / "train.log"
+    # 定义日志路径（统一在 logs_root 下）
+    log_path = settings.logs_root_resolved / f"{job_id}.log"
     
     # 在数据库中创建任务记录
     db_job = create_job(
