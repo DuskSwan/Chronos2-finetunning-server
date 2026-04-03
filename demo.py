@@ -9,9 +9,9 @@ from pathlib import Path
 
 import requests
 
-from app.core.config import Settings
+from app.core.config import get_settings
 
-PORT = Settings.port
+PORT = get_settings().port
 BASE_URL = f"http://127.0.0.1:{PORT}"
 DATA_FILE = Path("mock_train_data.csv").resolve()
 SELECTED_COLUMNS = ["value1", "value2", "value3"]
