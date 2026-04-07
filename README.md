@@ -359,48 +359,117 @@ ts_model_train_and_finetune/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI 应用工厂 + 生命周期管理
-│   ├── api/                 # API 路由
+│   │                         # 作用：创建FastAPI应用实例，管理应用生命周期（启动时初始化数据库、队列、worker；关闭时清理资源）
+│   ├── api/                 # API 路由层
 │   │   ├── __init__.py
 │   │   ├── health.py        # 健康检查端点
-│   │   └── finetune.py      # 任务创建端点
-│   ├── callbacks/           # 回调机制（新）
+│   │   │                     # 作用：提供简单的健康检查接口，用于监控服务状态
+│   │   └── finetune.py      # 微调任务相关端点
+│   │                         # 作用：处理任务创建（POST /v1/finetune/jobs）、查询（GET /v1/finetune/jobs/{job_id}）、
+│   │                         #      结果获取（GET /v1/finetune/jobs/{job_id}/result）、日志查询（GET /v1/finetune/jobs/{job_id}/logs）、
+│   │                         #      任务取消（POST /v1/finetune/jobs/{job_id}/cancel）等API请求
+│   ├── callbacks/           # 回调机制
 │   │   ├── __init__.py
 │   │   └── progress_callback.py  # 训练进度回调
-│   ├── core/                # 核心配置
+│   │                         # 作用：在训练过程中实时更新数据库中的任务进度、损失值，并检查取消请求
+│   ├── core/                # 核心配置和工具
 │   │   ├── __init__.py
 │   │   ├── config.py        # 设置管理
+│   │   │                     # 作用：使用Pydantic管理应用配置，支持环境变量和.env文件
 │   │   ├── paths.py         # 路径工具
+│   │   │                     # 作用：提供路径解析和目录创建的工具函数
 │   │   └── enums.py         # 状态枚举
+│   │                         # 作用：定义任务状态（queued/running/completed/failed/cancelled）和微调模式枚举
 │   ├── db/                  # 数据库层
 │   │   ├── __init__.py
 │   │   ├── session.py       # SQLAlchemy 会话设置
+│   │   │                     # 作用：配置数据库连接和会话管理
 │   │   ├── models.py        # ORM 模型
+│   │   │                     # 作用：定义finetune_jobs表的SQLAlchemy模型
 │   │   ├── crud.py          # CRUD 操作
+│   │   │                     # 作用：提供数据库的创建、读取、更新、删除操作
 │   │   └── init_db.py       # 数据库初始化
-│   ├── schemas/             # Pydantic schemas
+│   │                         # 作用：创建数据库表和初始数据
+│   ├── schemas/             # 数据验证和响应模型
 │   │   ├── __init__.py
-│   │   ├── request.py       # 请求 schema
-│   │   └── response.py      # 响应 schema
+│   │   ├── request.py       # 请求数据模型
+│   │   │                     # 作用：定义API请求的数据结构和验证规则
+│   │   └── response.py      # 响应数据模型
+│   │                         # 作用：定义API响应的数据结构
 │   ├── services/            # 业务逻辑层
 │   │   ├── __init__.py
 │   │   ├── queue_service.py # 任务队列管理
+│   │   │                     # 作用：管理内存中的任务队列，提供入队和出队操作
 │   │   ├── job_service.py   # 任务业务逻辑
-│   │   ├── trainer_service.py # 真实 Chronos-2 微调
-│   │   └── dataset_service.py # 数据集加载与转换
-│   └── workers/             # 后台 worker
+│   │   │                     # 作用：封装任务相关的业务操作，如状态更新、进度管理等
+│   │   ├── trainer_service.py # 真实 Chronos-2 微调服务
+│   │   │                     # 作用：调用Chronos-2官方API执行实际的模型微调训练
+│   │   ├── dataset_service.py # 数据集加载与转换
+│   │   │                     # 作用：加载CSV/Parquet数据文件，转换为Chronos-2所需的输入格式
+│   │   └── model_service.py # 模型加载服务
+│   │                         # 作用：加载本地缓存的Chronos-2基础模型
+│   └── workers/             # 后台处理
 │       ├── __init__.py
 │       └── trainer_worker.py # 训练 worker 线程
+│                         # 作用：后台线程持续从队列消费任务，调用训练服务执行微调
 │
 ├── tests/
 │   ├── __init__.py
 │   ├── test_create_job.py    # 第 1 步测试（任务创建）
 │   ├── test_worker_flow.py   # 第 2 步测试（异步工作流）
-│   └── test_trainer_service.py # 第 3 步测试（真实训练）
+│   ├── test_trainer_service.py # 第 3 步测试（真实训练）
+│   ├── test_query_api.py     # 第 4 步测试（查询接口）
+│   └── test_cancel_job.py    # 第 5 步测试（任务取消）
 │
-├── pyproject.toml
-├── README.md
-└── .gitignore
+├── pyproject.toml            # 项目依赖和配置
+├── README.md                 # 项目文档
+└── .gitignore               # Git忽略文件配置
 ```
+
+### 请求处理流程
+
+当收到一个微调任务创建请求时，系统按以下逻辑依次运行：
+
+1. **HTTP请求接收** (`app/api/finetune.py`)
+   - 接收POST `/v1/finetune/jobs` 请求
+   - 使用Pydantic验证请求参数 (`app/schemas/request.py`)
+
+2. **参数验证与预处理** (`app/api/finetune.py`)
+   - 验证训练数据路径、预测长度等必需参数
+   - 生成唯一任务ID (UUID)
+   - 创建任务输出目录 (`app/core/paths.py`)
+
+3. **数据库入库** (`app/db/crud.py`, `app/db/models.py`)
+   - 在SQLite数据库中创建任务记录
+   - 保存请求参数的JSON序列化
+   - 设置初始状态为"queued"
+
+4. **任务入队** (`app/services/queue_service.py`)
+   - 将任务ID加入内存队列
+   - 返回任务ID给客户端
+
+5. **后台消费** (`app/workers/trainer_worker.py`)
+   - Worker线程持续轮询队列
+   - 获取任务ID后更新任务状态为"running"
+
+6. **数据准备** (`app/services/dataset_service.py`)
+   - 加载训练数据文件（CSV/Parquet）
+   - 按需选择指定列，转换为float32数组
+
+7. **模型训练** (`app/services/trainer_service.py`)
+   - 加载Chronos-2基础模型 (`app/services/model_service.py`)
+   - 调用官方`pipeline.fit()`方法进行微调
+   - 通过回调机制实时更新进度 (`app/callbacks/progress_callback.py`)
+
+8. **进度更新** (`app/callbacks/progress_callback.py`)
+   - 每隔指定步数更新数据库中的current_step和last_loss
+   - 检查取消请求，如有则抛出异常终止训练
+
+9. **训练完成** (`app/services/trainer_service.py`)
+   - 保存微调后的模型到输出目录
+   - 更新任务状态为"completed"或"failed"
+
+整个流程采用异步设计：API立即返回任务ID，实际训练在后台进行，支持并发请求和实时进度查询。
 
 ## 数据库架构
 
@@ -605,14 +674,6 @@ pytest tests/ --cov=app
 ```bash
 pytest tests/test_create_job.py::test_create_finetune_job_success -v
 ```
-
-## 项目设计说明
-
-- **简洁设计**：最小化抽象，直接的实现
-- **类型注解**：所有 Python 代码都包含类型注解，便于 IDE 支持和代码维护
-- **路径处理**：全部使用 `pathlib.Path` 确保跨平台兼容性
-- **真实训练**：使用官方 Chronos-2 `fit()` 接口进行实际的模型微调
-- **Callback 机制**：自定义 callback 在训练过程中实时更新数据库和日志
 
 ## 项目进度
 
