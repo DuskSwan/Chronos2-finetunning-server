@@ -98,7 +98,7 @@ def validate_request(request: CreateFinetuneJobRequest) -> dict:
         "learning_rate": request.learning_rate,
         "num_steps": request.num_steps,
         "batch_size": request.batch_size,
-        "selected_columns": request.selected_columns,
+        "selected_groups": request.selected_groups,
     }
 
 

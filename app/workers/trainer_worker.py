@@ -126,7 +126,7 @@ class TrainerWorker:
                 "logging_steps": self.settings.logging_steps,
                 "finetuned_ckpt_name": self.settings.finetuned_ckpt_name,
                 "device": self.settings.device,
-                "selected_columns": request_data.get("selected_columns"),
+                "selected_groups": request_data.get("selected_groups"),
             }
 
             # 5. 执行真实训练

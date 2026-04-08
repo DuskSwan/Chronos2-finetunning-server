@@ -4,7 +4,45 @@
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class SelectedGroup(BaseModel):
+    """目标列与协变量列的分组定义。"""
+
+    target: str = Field(
+        description="目标列名",
+    )
+    covariates: list[str] = Field(
+        default_factory=list,
+        description="协变量列名列表",
+    )
+
+    @field_validator("target")
+    @classmethod
+    def validate_target(cls, v: str) -> str:
+        """验证 target 非空。"""
+        if not v or not v.strip():
+            raise ValueError("selected_groups.target 不能为空")
+        return v
+
+    @field_validator("covariates")
+    @classmethod
+    def validate_covariates(cls, v: list[str]) -> list[str]:
+        """验证 covariates 非空字符串且无重复。"""
+        if any((not item) or (not item.strip()) for item in v):
+            raise ValueError("selected_groups.covariates 不能包含空值")
+        unique = list(dict.fromkeys(v))
+        if len(unique) != len(v):
+            raise ValueError("selected_groups.covariates 不能包含重复项")
+        return v
+
+    @model_validator(mode="after")
+    def validate_group(self) -> "SelectedGroup":
+        """验证 target 不与 covariates 冲突。"""
+        if self.target in self.covariates:
+            raise ValueError("selected_groups.target 不能出现在 covariates 中")
+        return self
 
 
 class CreateFinetuneJobRequest(BaseModel):
@@ -20,7 +58,12 @@ class CreateFinetuneJobRequest(BaseModel):
                 "learning_rate": 0.0001,
                 "num_steps": 1000,
                 "batch_size": 32,
-                "selected_columns": ["target"],
+                "selected_groups": [
+                    {
+                        "target": "target",
+                        "covariates": ["feature1", "feature2"],
+                    }
+                ],
             }
         }
     )
@@ -55,9 +98,12 @@ class CreateFinetuneJobRequest(BaseModel):
         default=32,
         description="训练批大小",
     )
-    selected_columns: Optional[list[str]] = Field(
+    selected_groups: Optional[list[SelectedGroup]] = Field(
         default=None,
-        description="指定要使用的 CSV/Parquet 列名列表（为空则使用全部列）",
+        description=(
+            "目标列与协变量列的分组列表（为空则使用全部列）。"
+            "每个分组包含 target 与 covariates。"
+        ),
     )
 
     @field_validator("train_data_path")
@@ -116,15 +162,19 @@ class CreateFinetuneJobRequest(BaseModel):
             raise ValueError("批大小必须是正整数")
         return v
 
-    @field_validator("selected_columns")
+    @field_validator("selected_groups")
     @classmethod
-    def validate_selected_columns(cls, v: Optional[list[str]]) -> Optional[list[str]]:
-        """验证 selected_columns 非空且无重复。"""
+    def validate_selected_groups(
+        cls,
+        v: Optional[list[SelectedGroup]],
+    ) -> Optional[list[SelectedGroup]]:
+        """验证 selected_groups 非空且目标列不重复。"""
         if v is None:
             return v
         if not v:
-            raise ValueError("selected_columns 不能为空")
-        unique = list(dict.fromkeys(v))
-        if len(unique) != len(v):
-            raise ValueError("selected_columns 不能包含重复项")
+            raise ValueError("selected_groups 不能为空")
+        targets = [group.target for group in v]
+        unique_targets = list(dict.fromkeys(targets))
+        if len(unique_targets) != len(targets):
+            raise ValueError("selected_groups.target 不能包含重复项")
         return v

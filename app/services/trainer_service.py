@@ -7,7 +7,7 @@
 import json
 import inspect
 from pathlib import Path
-from typing import Any, Dict, Optional, Literal
+from typing import Any, Dict, Optional, Literal, TypedDict
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,13 @@ from app.services.model_service import load_local_model
 from chronos import BaseChronosPipeline, Chronos2Pipeline
 
 from loguru import logger
+
+
+class SelectedGroup(TypedDict):
+    """目标列与协变量列的分组定义。"""
+
+    target: str
+    covariates: list[str]
 
 
 def train_chronos2(
@@ -36,7 +43,7 @@ def train_chronos2(
     logging_steps: int = 100,
     finetuned_ckpt_name: str = "finetuned-ckpt",
     device: str = "cpu",
-    selected_columns: Optional[list[str]] = None,
+    selected_groups: Optional[list[SelectedGroup]] = None,
     **kwargs: Any
 ) -> str:
     """使用 Chronos-2 微调训练模型。
@@ -60,7 +67,7 @@ def train_chronos2(
         logging_steps: 日志间隔（默认 100）。
         finetuned_ckpt_name: 微调检查点名称。
         device: 设备（"cpu" 或 "cuda"，默认 "cpu"）。
-        selected_columns: 指定 CSV/Parquet 中要使用的列名列表。
+        selected_groups: 目标列与协变量列的分组列表。
         **kwargs: 其他参数。
 
     Returns:
@@ -98,7 +105,7 @@ def train_chronos2(
 
         train_inputs = prepare_input_data(
             train_data_path,
-            target_columns=selected_columns,
+            selected_groups=selected_groups,
         )
         logger.info(f"训练数据准备完成: shape={train_inputs.shape}")
 
@@ -110,7 +117,7 @@ def train_chronos2(
             callback.check_cancel_requested()
             validation_inputs = prepare_input_data(
                 val_data_path,
-                target_columns=selected_columns,
+                selected_groups=selected_groups,
             )
             if validation_inputs is not None:
                 logger.info(f"验证数据准备完成: shape={validation_inputs.shape}")

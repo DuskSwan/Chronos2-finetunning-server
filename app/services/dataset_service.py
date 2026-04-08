@@ -4,7 +4,7 @@
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, TypedDict
 
 import pandas as pd
 import numpy as np
@@ -56,9 +56,16 @@ def load_data(
     return df
 
 
+class SelectedGroup(TypedDict):
+    """目标列与协变量列的分组定义。"""
+
+    target: str
+    covariates: List[str]
+
+
 def prepare_input_data(
     train_data_path: str,
-    target_columns: List[str] | None = None,
+    selected_groups: List[SelectedGroup] | None = None,
 ) -> np.ndarray:
     """准备训练数据。
 
@@ -66,11 +73,26 @@ def prepare_input_data(
 
     Args:
         train_data_path: 训练数据文件路径。
-        target_columns: 目标值列名列表。
+        selected_groups: 目标列与协变量列的分组列表。
 
     Returns:
         Chronos-2 fit() 所需的 (batch_size, num_variates, history_length) 格式的 numpy 数组。
     """
+    # TODO: 按 selected_groups 的分组语义生成模型输入（target + covariates）。
+    # 目前仅做列名汇总以保持接口兼容，后续由你手动替换具体逻辑。
+    target_columns = None
+    if selected_groups:
+        target_columns = []
+        for group in selected_groups:
+            target = group.get("target")
+            if target:
+                target_columns.append(target)
+            covariates = group.get("covariates") or []
+            for covariate in covariates:
+                if covariate:
+                    target_columns.append(covariate)
+        target_columns = list(dict.fromkeys(target_columns))
+
     df = load_data(
         train_data_path,
         target_columns=target_columns,
