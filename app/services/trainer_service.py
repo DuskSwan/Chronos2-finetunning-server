@@ -88,11 +88,12 @@ def train_chronos2(
     output_dir_path.mkdir(parents=True, exist_ok=True)
 
     # 初始化回调
+    total_steps = num_steps * len(selected_groups)
     callback = ProgressCallback(
         db_session=db,
         job_id=job_id,
         log_path=log_path,
-        max_steps=num_steps,
+        max_steps=total_steps,
     )
     callback.on_training_start()
     callback.check_cancel_requested()
@@ -178,7 +179,7 @@ def train_chronos2(
         callback_adapter = ChronosCallbackAdapter(callback)
 
         model_paths = []
-        for i,input_dict in enumerate(train_inputs):
+        for i, input_dict in enumerate(train_inputs):
             # 调用微调
             fit_kwargs: Dict[str, Any] = dict(
                 inputs=[input_dict],
@@ -198,7 +199,7 @@ def train_chronos2(
 
             # 6. 保存微调后的模型
             tar_col = selected_groups[i]['target']
-            model_save_path = output_dir_path / (finetuned_ckpt_name + tar_col)
+            model_save_path = output_dir_path / f"{finetuned_ckpt_name}_{tar_col}"
             model_save_path.mkdir(parents=True, exist_ok=True)
 
             logger.info(f"第{i}相关组训练 - 保存微调后的模型到: {model_save_path}")
@@ -210,6 +211,7 @@ def train_chronos2(
             callback._write_log(f"模型保存成功")
 
             # 7. 记录训练完成
+            callback.on_step_end(step=min(total_steps, (i + 1) * num_steps), loss=None)
             callback.on_training_end()
             model_paths.append( str(model_save_path) )
         
