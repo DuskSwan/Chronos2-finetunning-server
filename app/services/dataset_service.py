@@ -95,11 +95,12 @@ def prepare_input_data(
         cov_cols = group['covariates']
         res.append({})
         assert(tar_col in df.columns)
-        res[-1]['target'] = df[tar_col].to_numpy()
+        # Ensure arrays are writable for PyTorch (avoid non-writable numpy warning)
+        res[-1]['target'] = df[tar_col].to_numpy(copy=True)
         past_covariates = {}
         for col in cov_cols:
             assert(col in df.columns)
-            past_covariates[col] = df[col].to_numpy()
+            past_covariates[col] = df[col].to_numpy(copy=True)
         if past_covariates:
             res[-1]['past_covariates'] = past_covariates
     
