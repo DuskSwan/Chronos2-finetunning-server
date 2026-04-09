@@ -59,10 +59,14 @@ class TestDatasetService:
 
     def test_prepare_input_data_csv(self, sample_csv_data):
         """测试从 CSV 加载训练数据并转换为 3D 数组。"""
-        data = prepare_input_data(sample_csv_data, target_columns=["target"])
+        data = prepare_input_data(
+            sample_csv_data,
+            selected_groups=[{"target": "target", "covariates": []}],
+        )
         
-        assert data.shape == (1, 1, 6)
-        assert data[0, 0].tolist() == [100.5, 101.3, 99.8, 200.1, 202.5, 201.2]
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["target"].tolist() == [100.5, 101.3, 99.8, 200.1, 202.5, 201.2]
 
     def test_load_data_missing_columns(self, sample_csv_data):
         """测试缺少目标列时的错误。"""
@@ -158,9 +162,9 @@ class TestTrainerService:
             db=db,
             job_id=job_id,
             train_data_path=sample_csv_data,
-            val_data_path=None,
             output_dir=output_dir,
             log_path=log_path,
+            selected_groups=[{"target": "target", "covariates": []}],
             prediction_length=1,
             context_length=2,
             finetune_mode="lora",
@@ -170,11 +174,12 @@ class TestTrainerService:
             logging_steps=1,
             finetuned_ckpt_name="finetuned-ckpt",
             device="cpu",
-            selected_columns=["target"],
         )
 
         # 验证模型路径与日志
-        model_path = Path(result)
+        assert isinstance(result, list)
+        assert len(result) == 1
+        model_path = Path(result[0])
         assert model_path.exists()
         assert model_path.is_dir()
         assert Path(log_path).exists()
@@ -207,9 +212,9 @@ class TestTrainerService:
                 db=db,
                 job_id=job_id,
                 train_data_path=missing_path,
-                val_data_path=None,
                 output_dir=str(tmp_path),
                 log_path=str(Path(tmpdir) / "train.log"),
+                selected_groups=[{"target": "target", "covariates": []}],
             )
 
 

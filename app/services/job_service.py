@@ -34,6 +34,15 @@ from app.schemas.response import (
 )
 
 
+def _deserialize_model_paths(value: Optional[str]) -> Optional[list[str]]:
+    if value is None or not str(value).strip():
+        return None
+    parsed = json.loads(value)
+    if isinstance(parsed, list):
+        return [str(item) for item in parsed]
+    return None
+
+
 def create_finetune_job(
     request_data: Dict[str, Any],
     settings: Settings,
@@ -127,19 +136,19 @@ def update_job_step(
 def complete_job_training(
     db: Any,
     job_id: str,
-    model_path: str,
+    model_paths: list[str],
 ) -> None:
     """标记任务为完成状态。
 
     Args:
         db: 数据库会话。
         job_id: 任务 ID。
-        model_path: 微调模型路径。
+        model_paths: 微调模型路径列表。
     """
     mark_job_completed(
         db=db,
         job_id=job_id,
-        model_path=model_path,
+        model_paths=model_paths,
         finished_at=datetime.now(timezone.utc),
     )
 
@@ -187,6 +196,8 @@ def get_job_detail(db: Any, job_id: str) -> JobDetailResponse:
         last_loss=job.last_loss,
     )
 
+    model_paths = _deserialize_model_paths(job.model_paths)
+
     return JobDetailResponse(
         job_id=job.id,
         status=job.status,
@@ -196,7 +207,7 @@ def get_job_detail(db: Any, job_id: str) -> JobDetailResponse:
         progress=progress,
         error_message=job.error_message,
         log_path=job.log_path,
-        model_path=job.model_path,
+        model_paths=model_paths,
     )
 
 
@@ -223,11 +234,13 @@ def get_job_result(db: Any, job_id: str) -> JobResultResponse:
             detail=f"任务未完成，当前状态: {job.status}",
         )
 
+    model_paths = _deserialize_model_paths(job.model_paths)
+
     return JobResultResponse(
         job_id=job.id,
         status=job.status,
         output_dir=job.output_dir,
-        model_path=job.model_path,
+        model_paths=model_paths,
         metrics={},
     )
 

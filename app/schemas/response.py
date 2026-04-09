@@ -47,7 +47,7 @@ class JobDetailResponse(BaseModel):
     progress: JobProgressResponse = Field(description="训练进度")
     error_message: Optional[str] = Field(default=None, description="错误信息")
     log_path: Optional[str] = Field(default=None, description="日志文件路径")
-    model_path: Optional[str] = Field(default=None, description="模型输出路径")
+    model_paths: Optional[list[str]] = Field(default=None, description="模型输出路径列表")
 
 
 class JobResultResponse(BaseModel):
@@ -55,7 +55,7 @@ class JobResultResponse(BaseModel):
     job_id: str = Field(description="唯一任务标识符")
     status: str = Field(description="任务状态")
     output_dir: str = Field(description="任务输出目录")
-    model_path: Optional[str] = Field(default=None, description="模型输出路径")
+    model_paths: Optional[list[str]] = Field(default=None, description="模型输出路径列表")
     metrics: dict[str, Any] = Field(default_factory=dict, description="训练指标")
 
 

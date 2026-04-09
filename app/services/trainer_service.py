@@ -31,9 +31,10 @@ def train_chronos2(
     db: Session,
     job_id: str,
     train_data_path: str,
-    val_data_path: Optional[str],
+    # val_data_path: Optional[str],
     output_dir: str,
     log_path: str,
+    selected_groups: list[SelectedGroup],
     prediction_length: int = 96,
     context_length: int = 512,
     finetune_mode: Literal['full', 'lora'] = "lora",
@@ -43,9 +44,8 @@ def train_chronos2(
     logging_steps: int = 100,
     finetuned_ckpt_name: str = "finetuned-ckpt",
     device: str = "cpu",
-    selected_groups: Optional[list[SelectedGroup]] = None,
     **kwargs: Any
-) -> str:
+) -> list[str]:
     """使用 Chronos-2 微调训练模型。
 
     此函数加载数据、准备训练环境、调用官方 Chronos-2 fit()、
@@ -71,7 +71,7 @@ def train_chronos2(
         **kwargs: 其他参数。
 
     Returns:
-        已保存模型的路径。
+        已保存模型的路径列表。
 
     Raises:
         FileNotFoundError: 如果数据文件不存在。
@@ -107,20 +107,20 @@ def train_chronos2(
             train_data_path,
             selected_groups=selected_groups,
         )
-        logger.info(f"训练数据准备完成: shape={train_inputs.shape}")
+        logger.info(f"训练数据准备完成: group_num={len(train_inputs)}")
 
         # 2. 准备验证数据
-        validation_inputs = None
-        if val_data_path:
-            logger.info(f"加载验证数据: {val_data_path}")
-            callback._write_log(f"加载验证数据: {val_data_path}")
-            callback.check_cancel_requested()
-            validation_inputs = prepare_input_data(
-                val_data_path,
-                selected_groups=selected_groups,
-            )
-            if validation_inputs is not None:
-                logger.info(f"验证数据准备完成: shape={validation_inputs.shape}")
+        # validation_inputs = None
+        # if val_data_path:
+        #     logger.info(f"加载验证数据: {val_data_path}")
+        #     callback._write_log(f"加载验证数据: {val_data_path}")
+        #     callback.check_cancel_requested()
+        #     validation_inputs = prepare_input_data(
+        #         val_data_path,
+        #         selected_groups=selected_groups,
+        #     )
+        #     if validation_inputs is not None:
+        #         logger.info(f"验证数据准备完成: shape={validation_inputs.shape}")
 
         # 3. 确定设备
         if "cuda" in device.lower():
@@ -177,49 +177,43 @@ def train_chronos2(
 
         callback_adapter = ChronosCallbackAdapter(callback)
 
-        # 调用微调（兼容不同版本的 Chronos-2 fit() 签名）
-        fit_kwargs: Dict[str, Any] = dict(
-            inputs=train_inputs,
-            validation_inputs=validation_inputs,
-            batch_size=batch_size,
-            learning_rate=learning_rate,
-            num_steps=num_steps,
-            prediction_length=prediction_length,
-            context_length=context_length,
-            logging_steps=logging_steps,
-            # Note: extra kwargs 会进入 TrainingArguments
-        )
+        model_paths = []
+        for i,input_dict in enumerate(train_inputs):
+            # 调用微调
+            fit_kwargs: Dict[str, Any] = dict(
+                inputs=[input_dict],
+                # validation_inputs=validation_inputs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                num_steps=num_steps,
+                prediction_length=prediction_length,
+                context_length=context_length,
+                logging_steps=logging_steps,
+                finetune_mode=finetune_mode,
+                # Note: extra kwargs 会进入 TrainingArguments
+            )
+            assert "finetune_mode" in inspect.signature(pipeline.fit).parameters
 
-        supports_finetune_mode = "finetune_mode" in inspect.signature(pipeline.fit).parameters
-        if supports_finetune_mode:
-            fit_kwargs["finetune_mode"] = finetune_mode
-        else:
-            if finetune_mode != "full":
-                msg = (
-                    "当前 Chronos 版本的 fit() 不支持 finetune_mode，"
-                    "将忽略该参数并使用全量微调。"
-                )
-                logger.warning(msg)
-                callback._write_log(f"警告: {msg}")
+            fine_tuned_pipeline = pipeline.fit(**fit_kwargs)
 
-        fine_tuned_pipeline = pipeline.fit(**fit_kwargs)
+            # 6. 保存微调后的模型
+            tar_col = selected_groups[i]['target']
+            model_save_path = output_dir_path / (finetuned_ckpt_name + tar_col)
+            model_save_path.mkdir(parents=True, exist_ok=True)
 
-        # 6. 保存微调后的模型
-        model_save_path = output_dir_path / finetuned_ckpt_name
-        model_save_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"第{i}相关组训练 - 保存微调后的模型到: {model_save_path}")
+            callback._write_log(f"保存模型到: {model_save_path}")
 
-        logger.info(f"保存微调后的模型到: {model_save_path}")
-        callback._write_log(f"保存模型到: {model_save_path}")
+            fine_tuned_pipeline.save_pretrained(str(model_save_path))
 
-        fine_tuned_pipeline.save_pretrained(str(model_save_path))
+            logger.info(f"模型保存成功")
+            callback._write_log(f"模型保存成功")
 
-        logger.info(f"模型保存成功")
-        callback._write_log(f"模型保存成功")
-
-        # 7. 记录训练完成
-        callback.on_training_end()
-
-        return str(model_save_path)
+            # 7. 记录训练完成
+            callback.on_training_end()
+            model_paths.append( str(model_save_path) )
+        
+        return model_paths
 
     except CancelledError as e:
         logger.info(f"训练被取消: {e}")
@@ -229,52 +223,3 @@ def train_chronos2(
         logger.error(f"训练失败: {e}", exc_info=True)
         callback.on_exception(e)
         raise
-
-
-def mock_train(
-    config: Dict[str, Any],
-    steps: int = 5,
-) -> str:
-    """模拟微调过程（用于测试）。
-
-    此函数模拟一个假的微调训练，不实际对数据进行处理或模型训练。
-    本函数仅供测试使用，真实训练请使用 train_chronos2()。
-
-    Args:
-        config: 训练配置字典，包含 output_dir 等信息。
-        steps: 训练步数。默认 5。
-
-    Returns:
-        模型检查点的路径（假的）。
-
-    例：
-        model_path = mock_train({"output_dir": "/path/to/artifacts/job-id"})
-    """
-    import random
-    import time
-
-    output_dir = Path(config.get("output_dir", "./artifacts"))
-
-    # 确保输出目录存在
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # 模拟训练过程
-    print(f"[模拟训练器] 开始训练，总步数: {steps}")
-
-    for step in range(1, steps + 1):
-        # 模拟每步处理时间 0.2 ~ 0.5 秒
-        sleep_time = random.uniform(0.2, 0.5)
-        time.sleep(sleep_time)
-
-        # 模拟损失下降
-        loss = 1.0 - (step / steps) * 0.7  # 从 1.0 下降到 ~0.3
-        loss = loss + random.uniform(-0.02, 0.02)  # 加入一点随机波动
-        loss = max(loss, 0.1)  # 防止负值
-
-        print(f"[模拟训练器] 第 {step}/{steps} 步，损失: {loss:.4f}")
-
-    # 返回假的模型路径
-    model_path = str(output_dir / "finetuned-ckpt")
-    print(f"[模拟训练器] 训练完成，模型路径: {model_path}")
-
-    return model_path

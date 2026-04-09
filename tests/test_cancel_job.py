@@ -191,7 +191,7 @@ def test_cancel_completed_job_returns_conflict(client: TestClient, isolated_app)
     crud.mark_job_completed(
         db=db,
         job_id=job_id,
-        model_path=f"{output_dir}/finetuned-ckpt",
+        model_paths=[f"{output_dir}/finetuned-ckpt"],
         finished_at=datetime.now(timezone.utc),
     )
     db.close()

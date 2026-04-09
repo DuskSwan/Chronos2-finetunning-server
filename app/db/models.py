@@ -26,7 +26,7 @@ class FinetuneJob(Base):
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     output_dir: Mapped[str] = mapped_column(String(512), nullable=False)
     log_path: Mapped[str] = mapped_column(String(512), nullable=False)
-    model_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    model_paths: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_steps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

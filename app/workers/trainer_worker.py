@@ -131,7 +131,7 @@ class TrainerWorker:
 
             # 5. 执行真实训练
             logger.info(f"开始真实训练任务: {job_id}")
-            model_path = train_chronos2(**train_config)
+            model_paths = train_chronos2(**train_config)
 
             # 6. 标记为完成（若未取消）
             db.expire_all()
@@ -141,8 +141,8 @@ class TrainerWorker:
                 logger.info(f"任务 {job_id} 在完成前被取消")
                 return
             
-            complete_job_training(db, job_id, model_path)
-            logger.info(f"任务 {job_id} 已完成，模型路径: {model_path}")
+            complete_job_training(db, job_id, model_paths)
+            logger.info(f"任务 {job_id} 已完成，模型路径列表: {model_paths}")
             
         except CancelledError as e:
             logger.info(f"任务 {job_id} 被取消: {e}")

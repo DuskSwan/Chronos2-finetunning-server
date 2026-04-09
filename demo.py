@@ -14,7 +14,10 @@ from app.core.config import get_settings
 PORT = get_settings().port
 BASE_URL = f"http://127.0.0.1:{PORT}"
 DATA_FILE = Path("mock_train_data.csv").resolve()
-SELECTED_COLUMNS = ["value1", "value2", "value3"]
+SELECTED_GROUPS = [{
+    "target": "value1",
+    "covariates": ["value2","value3","value4"]
+}]
 
 
 def _print_section(title: str) -> None:
@@ -60,7 +63,7 @@ def demo() -> None:
     print(f"GET /health -> {resp.status_code}")
     print(json.dumps(resp.json(), indent=2))
 
-    # 2. Create Job (mock_train_data.csv + selected_columns)
+    # 2. Create Job (mock_train_data.csv + selected_groups)
     print("\n[2] Create Fine-tuning Job")
     payload = {
         "train_data_path": str(DATA_FILE),
@@ -70,7 +73,7 @@ def demo() -> None:
         "learning_rate": 1e-4,
         "num_steps": 1,
         "batch_size": 1,
-        "selected_columns": SELECTED_COLUMNS,
+        "selected_groups": SELECTED_GROUPS,
     }
     print("POST /v1/finetune/jobs")
     print(json.dumps(payload, indent=2))
@@ -100,7 +103,7 @@ def demo() -> None:
     print(f"GET /v1/finetune/jobs/{job_id}/logs -> {resp.status_code}")
     print(resp.text)
 
-    _print_section("✓ DEMO COMPLETED")
+    _print_section("DEMO COMPLETED")
 
 
 if __name__ == "__main__":

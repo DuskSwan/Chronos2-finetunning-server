@@ -65,42 +65,42 @@ class SelectedGroup(TypedDict):
 
 def prepare_input_data(
     train_data_path: str,
-    selected_groups: List[SelectedGroup] | None = None,
-) -> np.ndarray:
+    selected_groups: List[SelectedGroup],
+) -> list[dict]:
     """准备训练数据。
 
     一体化函数：加载 → 验证 → 转换。
 
     Args:
         train_data_path: 训练数据文件路径。
-        selected_groups: 目标列与协变量列的分组列表。
+        selected_groups: 目标列与协变量列的分组列表，格式为
+            { "target": "target_column", "covariates": ["col1","col2",...] }
 
     Returns:
-        Chronos-2 fit() 所需的 (batch_size, num_variates, history_length) 格式的 numpy 数组。
+        字典组成的列表，每一个字典是 Chronos-2 fit() 可接受的字典，形如
+        {
+            "target": np.ndarray(shape=(history_length,)),
+            "past_covariates": {
+                "temp": np.ndarray(shape=(history_length,)),
+                "pressure": np.ndarray(shape=(history_length,)),
+            },
+        }
     """
-    # TODO: 按 selected_groups 的分组语义生成模型输入（target + covariates）。
-    # 目前仅做列名汇总以保持接口兼容，后续由你手动替换具体逻辑。
-    target_columns = None
-    if selected_groups:
-        target_columns = []
-        for group in selected_groups:
-            target = group.get("target")
-            if target:
-                target_columns.append(target)
-            covariates = group.get("covariates") or []
-            for covariate in covariates:
-                if covariate:
-                    target_columns.append(covariate)
-        target_columns = list(dict.fromkeys(target_columns))
 
-    df = load_data(
-        train_data_path,
-        target_columns=target_columns,
-    )
+    df = load_data(train_data_path)
+    res = []
+
+    for group in selected_groups:
+        tar_col = group['target']
+        cov_cols = group['covariates']
+        res.append({})
+        assert(tar_col in df.columns)
+        res[-1]['target'] = df[tar_col].to_numpy()
+        past_covariates = {}
+        for col in cov_cols:
+            assert(col in df.columns)
+            past_covariates[col] = df[col].to_numpy()
+        if past_covariates:
+            res[-1]['past_covariates'] = past_covariates
     
-    # 转为可写的数值数组，避免非数值/只读数组导致训练失败
-    array = df.to_numpy(copy=True).astype("float32", copy=False)
-    array = array.transpose()  # 转置为 (num_variates, history_length)
-    array = array[np.newaxis, :] # 增加 batch_size 维度，变为 (1, num_variates, history_length)
-    
-    return array
+    return res

@@ -142,7 +142,7 @@ def test_get_job_result_completed(client: TestClient, test_db_session):
     crud.mark_job_completed(
         db=test_db_session,
         job_id=job_id,
-        model_path=f"{output_dir}/finetuned-ckpt",
+        model_paths=[f"{output_dir}/finetuned-ckpt"],
         finished_at=datetime.now(timezone.utc),
     )
 
@@ -152,7 +152,7 @@ def test_get_job_result_completed(client: TestClient, test_db_session):
     assert data["job_id"] == job_id
     assert data["status"] == "completed"
     assert data["output_dir"] == output_dir
-    assert data["model_path"] == f"{output_dir}/finetuned-ckpt"
+    assert data["model_paths"] == [f"{output_dir}/finetuned-ckpt"]
     assert data["metrics"] == {}
 
 

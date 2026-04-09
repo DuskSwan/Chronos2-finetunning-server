@@ -259,7 +259,7 @@ def test_job_completes(client: TestClient, isolated_app, test_settings: Settings
             "context_length": 2,
             "num_steps": 1,
             "batch_size": 1,
-            "selected_columns": ["target"],
+            "selected_groups": [{"target": "target", "covariates": []}],
         },
     )
     
@@ -275,8 +275,10 @@ def test_job_completes(client: TestClient, isolated_app, test_settings: Settings
         job = get_job_by_id(db, job_id)
         assert job is not None
         assert job.status == "completed"
-        assert job.model_path is not None
-        assert Path(job.model_path).exists()
+        assert job.model_paths is not None
+        model_paths = json.loads(job.model_paths)
+        assert isinstance(model_paths, list)
+        assert Path(model_paths[0]).exists()
     finally:
         db.close()
 
@@ -294,7 +296,7 @@ def test_job_progress_tracked(client: TestClient, isolated_app, test_settings: S
             "context_length": 2,
             "num_steps": 1,
             "batch_size": 1,
-            "selected_columns": ["target"],
+            "selected_groups": [{"target": "target", "covariates": []}],
         },
     )
     

@@ -172,10 +172,14 @@ def update_job_progress(
     return job
 
 
+def _serialize_model_paths(model_paths: list[str]) -> str:
+    return json.dumps(model_paths, ensure_ascii=False)
+
+
 def mark_job_completed(
     db: Session,
     job_id: str,
-    model_path: str,
+    model_paths: list[str],
     finished_at: Optional[datetime] = None,
 ) -> Optional[FinetuneJob]:
     """
@@ -184,7 +188,7 @@ def mark_job_completed(
     参数：
         db: 数据库会话
         job_id: 任务 ID
-        model_path: 微调模型路径
+        model_paths: 微调模型路径列表
         finished_at: 完成时间
     
     返回：
@@ -195,7 +199,7 @@ def mark_job_completed(
         return None
     
     job.status = JobStatus.completed.value
-    job.model_path = model_path
+    job.model_paths = _serialize_model_paths(model_paths)
     job.finished_at = finished_at or datetime.now(timezone.utc)
     
     db.commit()

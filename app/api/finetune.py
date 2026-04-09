@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -144,6 +145,9 @@ async def create_finetune_job(
     job_output_dir = settings.artifacts_root_resolved / job_id
     ensure_dir(job_output_dir)
     
+    # 统一转成可 JSON 序列化结构
+    validated_params = jsonable_encoder(validated_params)
+
     # 写入 request.json（可配置关闭）
     if settings.save_request_artifacts:
         request_json_path = job_output_dir / "request.json"
