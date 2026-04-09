@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+pydantic-settings
+python-dotenv
+chronos-forecasting
+pandas
+pyarrow
+loguru
+peft
+
+pytest-asyncio
+httpx
