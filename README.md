@@ -90,10 +90,10 @@ pip install -e ".[dev]"
 
 ```bash
 # 方式 A：直接使用 uvicorn（端口不会读取 .env，需手动指定）
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8011
 
 # 方式 B：用 python -m uvicorn 启动（同样需要手动指定端口）
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8011 --reload
 
 # 方式 C：使用项目内的启动入口（会读取 .env 中的 HOST/PORT）
 python -m app.main
@@ -114,7 +114,7 @@ python -m app.main
 ### 健康检查
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8011/health
 ```
 
 响应：
@@ -127,10 +127,10 @@ curl http://127.0.0.1:8000/health
 
 ### 创建微调任务
 
-最小请求示例（仅需 train_data_path 和 prediction_length）：
+最小请求示例（必需包含 train_data_path, prediction_length, selected_groups）：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
+curl -X POST http://127.0.0.1:8011/v1/finetune/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "train_data_path": "/path/to/train.csv",
@@ -147,7 +147,7 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 完整请求示例（包含所有可选参数）：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
+curl -X POST http://127.0.0.1:8011/v1/finetune/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "train_data_path": "/path/to/train.csv",
@@ -233,7 +233,7 @@ value1,value2,value3
 1) 查询任务详情
 
 ```bash
-curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>
+curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>
 ```
 
 响应示例：
@@ -259,7 +259,7 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>
 1) 查询任务结果（仅完成后可用）
 
 ```bash
-curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/result
+curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/result
 ```
 
 响应示例：
@@ -280,16 +280,16 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/result
 
 ```bash
 # 返回完整日志
-curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/logs
+curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/logs
 
 # 返回最后 200 行
-curl "http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/logs?tail=200"
+curl "http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/logs?tail=200"
 ```
 
 1) 任务列表（可选）
 
 ```bash
-curl "http://127.0.0.1:8000/v1/finetune/jobs?limit=20"
+curl "http://127.0.0.1:8011/v1/finetune/jobs?limit=20"
 ```
 
 ### 取消任务
@@ -302,7 +302,7 @@ curl "http://127.0.0.1:8000/v1/finetune/jobs?limit=20"
 **取消接口：**
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/cancel
+curl -X POST http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/cancel
 ```
 
 响应示例：
@@ -351,7 +351,7 @@ logs/
 ```env
 # 服务器设置
 HOST=127.0.0.1
-PORT=8000
+PORT=8011
 
 # 数据库
 SQLITE_DB_PATH=./data/finetune.db
@@ -517,7 +517,7 @@ ts_model_train_and_finetune/
 
 ### 基础信息
 
-Base URL: `http://127.0.0.1:8000`  
+Base URL: `http://127.0.0.1:8011`  
 Content-Type: `application/json`  
 时间字段: ISO 8601（UTC）  
 认证: 无
