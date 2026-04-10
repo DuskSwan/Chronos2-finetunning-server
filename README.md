@@ -134,7 +134,13 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "train_data_path": "/path/to/train.csv",
-    "prediction_length": 96
+    "prediction_length": 96,
+    "selected_groups": [
+      {
+        "target": "target",
+        "covariates": []
+      }
+    ]
   }'
 ```
 
@@ -152,7 +158,12 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
     "learning_rate": 0.0001,
     "num_steps": 1000,
     "batch_size": 32,
-    "selected_columns": ["target"]
+    "selected_groups": [
+      {
+        "target": "target",
+        "covariates": ["feature1", "feature2"]
+      }
+    ]
   }'
 ```
 
@@ -177,7 +188,9 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 | `learning_rate` | float | 1e-4 | 学习率 |
 | `num_steps` | int | 1000 | 训练总步数 |
 | `batch_size` | int | 32 | 批处理大小 |
-| `selected_columns` | list[str] \| null | null | 仅使用指定列（为空则使用全部列） |
+| `selected_groups` | list[object] | **必需** | 相关组列表，每个元素形如 `{"target": "...", "covariates": ["..."]}` |
+
+> 每个 `selected_groups` 元素会独立训练一个模型，返回的 `model_paths` 为对应的模型目录列表。
 
 **任务状态说明**：
 
@@ -189,14 +202,16 @@ curl -X POST http://127.0.0.1:8000/v1/finetune/jobs \
 
 ### 支持的数据格式
 
-当前版本的数据读取逻辑是：读取表格 →（可选）按 `selected_columns` 选择列 → 转为 `float32` 数组。
+当前版本的数据读取逻辑是：读取表格 → 按 `selected_groups` 中的列构造 Chronos 输入 →
+每个 group 生成一个 `{"target": ..., "past_covariates": ...}` 的字典（列表传入 `fit()`）。
 因此数据格式需要满足下面要求：
 
 - 支持 CSV / Parquet
 - 每一列被视为一个变量（variates），每一行是一个时间步
 - 所选列必须是数值列（否则转换为 `float32` 会失败）
-- 若未传 `selected_columns`，将使用全部列
-- 当前版本不会解析 `item_id` / `timestamp` 等长表字段；若有这些列，请在上传前转换为“宽表”或用 `selected_columns` 排除
+- `selected_groups` 中引用的列必须存在
+- `target` 与 `covariates` 必须是数值列（否则转换为数值数组会失败）
+- 当前版本不会解析 `item_id` / `timestamp` 等长表字段；若有这些列，请在上传前转换为“宽表”
 
 #### CSV 示例（宽表）
 
@@ -237,7 +252,7 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>
   },
   "error_message": null,
   "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
-  "model_path": null
+  "model_paths": null
 }
 ```
 
@@ -254,7 +269,9 @@ curl http://127.0.0.1:8000/v1/finetune/jobs/<job_id>/result
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "completed",
   "output_dir": "./artifacts/550e8400-e29b-41d4-a716-446655440000",
-  "model_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt",
+  "model_paths": [
+    "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
+  ],
   "metrics": {}
 }
 ```
@@ -312,9 +329,11 @@ result 接口与 detail 接口的区别
 artifacts/
 └── <job_id>/
     ├── request.json          # 保存的请求参数
-    └── finetuned-ckpt/       # 微调后的模型（训练完成后）
-        ├── model.pt
-        ├── config.json
+    ├── finetuned-ckpt_<target1>/  # 微调后的模型（训练完成后）
+    │   ├── model.pt
+    │   ├── config.json
+    │   └── ...
+    └── finetuned-ckpt_<target2>/  # 多组时会有多个目录
         └── ...
 ```
 
@@ -454,7 +473,7 @@ ts_model_train_and_finetune/
 
 6. **数据准备** (`app/services/dataset_service.py`)
    - 加载训练数据文件（CSV/Parquet）
-   - 按需选择指定列，转换为float32数组
+   - 按 `selected_groups` 构造 Chronos-2 输入字典（`target` + `past_covariates`）
 
 7. **模型训练** (`app/services/trainer_service.py`)
    - 加载Chronos-2基础模型 (`app/services/model_service.py`)
@@ -485,12 +504,14 @@ ts_model_train_and_finetune/
 | finished_at | DATETIME | 是 | NULL |
 | output_dir | VARCHAR(512) | 否 | - |
 | log_path | VARCHAR(512) | 否 | - |
-| model_path | VARCHAR(512) | 是 | NULL |
+| model_paths | TEXT | 是 | NULL |
 | error_message | TEXT | 是 | NULL |
 | current_step | INTEGER | 否 | 0 |
 | max_steps | INTEGER | 否 | 0 |
 | last_loss | FLOAT | 是 | NULL |
 | cancel_requested | BOOLEAN | 否 | False |
+
+> `model_paths` 在数据库中以 JSON 字符串保存（列表形式）。
 
 ## 前端 API 文档
 
@@ -531,7 +552,9 @@ Content-Type: `application/json`
 | learning_rate | float | 0.0001 | 否 | 学习率（正数） |
 | num_steps | int | 1000 | 否 | 训练总步数（正整数） |
 | batch_size | int | 32 | 否 | 批处理大小（正整数） |
-| selected_columns | list[str] \| null | null | 否 | 使用指定列；不传则使用全部列 |
+| selected_groups | list[object] | - | **是** | 相关组列表，每个元素形如 `{"target": "...", "covariates": ["..."]}` |
+
+> 每个 `selected_groups` 元素会独立训练一个模型，结果通过 `model_paths` 返回。
 
 响应 201:
 
@@ -583,7 +606,7 @@ Content-Type: `application/json`
   },
   "error_message": null,
   "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
-  "model_path": null
+  "model_paths": null
 }
 ```
 
@@ -599,7 +622,9 @@ Content-Type: `application/json`
   "job_id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "completed",
   "output_dir": "./artifacts/550e8400-e29b-41d4-a716-446655440000",
-  "model_path": "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt",
+  "model_paths": [
+    "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
+  ],
   "metrics": {}
 }
 ```
