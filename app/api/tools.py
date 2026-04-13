@@ -19,6 +19,7 @@ class CorrelationRequest(BaseModel):
             "example": {
                 "csv_content": "value1,value2,value3\n1,2,3\n4,5,6\n",
                 "columns": ["value1", "value2"],
+                "method": "pearson",
             }
         }
     )
@@ -28,6 +29,10 @@ class CorrelationRequest(BaseModel):
     )
     columns: list[str] = Field(
         description="用于计算相关性的列名列表",
+    )
+    method: str = Field(
+        default="pearson",
+        description="相关性计算方法: 'pearson', 'spearman', 或 'kendall'",
     )
 
     @field_validator("csv_content")
@@ -44,6 +49,15 @@ class CorrelationRequest(BaseModel):
             raise ValueError("columns 不能为空")
         if any(not item or not item.strip() for item in v):
             raise ValueError("columns 不能包含空值")
+        return v
+
+    @field_validator("method")
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        """验证相关性计算方法。"""
+        valid_methods = {"pearson", "spearman", "kendall"}
+        if v not in valid_methods:
+            raise ValueError(f"method 必须是 {valid_methods} 之一，得到 {v}")
         return v
 
 
@@ -73,8 +87,14 @@ async def calculate_correlation(request: CorrelationRequest) -> CorrelationRespo
             detail=f"找不到列: {missing_columns}",
         )
 
-    numeric_data = dataframe[request.columns].apply(pd.to_numeric, errors="coerce")
-    correlation = numeric_data.corr(method="pearson")
-    correlation_matrix: dict[str, dict[str, float | None]] = correlation.where(~correlation.isna(), None).to_dict()  # type: ignore[assignment]
+    try:
+        numeric_data = dataframe[request.columns].apply(pd.to_numeric, errors="coerce")
+        correlation = numeric_data.corr(method=request.method)
+        correlation_matrix: dict[str, dict[str, float | None]] = correlation.where(~correlation.isna(), None).to_dict()  # type: ignore[assignment]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"相关性计算失败: {exc}",
+        )
 
     return CorrelationResponse(correlation_matrix=correlation_matrix)

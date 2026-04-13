@@ -214,3 +214,29 @@ def test_calculate_correlation_matrix(client: TestClient) -> None:
     assert data["correlation_matrix"]["a"]["a"] == pytest.approx(1.0)
     assert data["correlation_matrix"]["c"]["c"] == pytest.approx(1.0)
     assert data["correlation_matrix"]["a"]["c"] == pytest.approx(1.0)
+
+
+def test_calculate_correlation_matrix_spearman(client: TestClient) -> None:
+    """测试 Spearman 相关性矩阵接口。"""
+    csv_content = "a,b,c\n1,2,4\n2,3,5\n3,4,6\n"
+    response = client.post(
+        "/v1/tools/correlation",
+        json={"csv_content": csv_content, "columns": ["a", "c"], "method": "spearman"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correlation_matrix"]["a"]["a"] == pytest.approx(1.0)
+    assert data["correlation_matrix"]["c"]["c"] == pytest.approx(1.0)
+    assert data["correlation_matrix"]["a"]["c"] == pytest.approx(1.0)
+
+
+def test_calculate_correlation_matrix_invalid_method(client: TestClient) -> None:
+    """测试无效相关性计算方法。"""
+    csv_content = "a,b,c\n1,2,4\n2,3,5\n3,4,6\n"
+    response = client.post(
+        "/v1/tools/correlation",
+        json={"csv_content": csv_content, "columns": ["a", "c"], "method": "invalid"},
+    )
+
+    assert response.status_code == 422  # Validation error
