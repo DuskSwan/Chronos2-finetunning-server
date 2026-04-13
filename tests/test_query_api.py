@@ -199,3 +199,18 @@ def test_get_job_logs_success(client: TestClient, test_db_session, temp_base_dir
     assert "line1" in response.text
     assert "line2" in response.text
     assert "line3" in response.text
+
+
+def test_calculate_correlation_matrix(client: TestClient) -> None:
+    """测试相关性矩阵接口。"""
+    csv_content = "a,b,c\n1,2,4\n2,3,5\n3,4,6\n"
+    response = client.post(
+        "/v1/tools/correlation",
+        json={"csv_content": csv_content, "columns": ["a", "c"]},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["correlation_matrix"]["a"]["a"] == pytest.approx(1.0)
+    assert data["correlation_matrix"]["c"]["c"] == pytest.approx(1.0)
+    assert data["correlation_matrix"]["a"]["c"] == pytest.approx(1.0)

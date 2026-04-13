@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import health, finetune
+from app.api import health, finetune, tools
 from app.core.config import get_settings
 from app.core.paths import ensure_dir
 from app.db.init_db import init_db
@@ -80,6 +80,7 @@ def create_app() -> FastAPI:
     # 包含路由器
     app.include_router(health.router)
     app.include_router(finetune.router)
+    app.include_router(tools.router)
     
     return app
 
