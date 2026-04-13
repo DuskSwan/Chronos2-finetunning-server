@@ -13,6 +13,7 @@
 - **真实 Chronos-2 微调**：使用官方 Chronos-2 库进行实际的模型微调
 - **进度跟踪与 Callback**：通过自定义 callback 在训练过程中实时更新进度
 - **健康检查**：简单的健康检查端点用于服务监控
+- **工具接口**：提供数据分析工具，如相关性矩阵计算
 
 ### 当前功能
 
@@ -28,6 +29,7 @@
 - ✅ 任务查询接口（详情 / 结果 / 日志）
 - ✅ 任务取消接口（协作式取消）
 - ✅ CPU/CUDA 自动设备检测
+- ✅ **工具接口**（相关性矩阵计算）
 
 **暂未实现/计划中**：
 
@@ -124,6 +126,53 @@ curl http://127.0.0.1:8011/health
   "status": "ok"
 }
 ```
+
+### 工具接口
+
+#### 计算相关性矩阵
+
+计算指定列之间的相关性矩阵，支持多种相关性计算方法。
+
+```bash
+curl -X POST http://127.0.0.1:8011/v1/tools/correlation \
+  -H "Content-Type: application/json" \
+  -d '{
+    "csv_content": "a,b,c\n1,2,4\n2,3,5\n3,4,6\n",
+    "columns": ["a", "c"],
+    "method": "pearson"
+  }'
+```
+
+响应：
+
+```json
+{
+  "correlation_matrix": {
+    "a": {
+      "a": 1.0,
+      "c": 1.0
+    },
+    "c": {
+      "a": 1.0,
+      "c": 1.0
+    }
+  }
+}
+```
+
+**参数说明**：
+
+| 参数 | 类型 | 默认值 | 说明 |
+| ---- | ---- | ------ | ---- |
+| `csv_content` | str | **必需** | CSV 格式的数据内容，必须包含表头行 |
+| `columns` | list[str] | **必需** | 用于计算相关性的列名列表 |
+| `method` | str | "pearson" | 相关性计算方法：`"pearson"`、`"spearman"` 或 `"kendall"` |
+
+**相关性方法说明**：
+
+- `pearson`: Pearson 相关系数，适用于线性关系
+- `spearman`: Spearman 等级相关系数，适用于单调关系（不要求线性）
+- `kendall`: Kendall Tau 相关系数，也适用于单调关系
 
 ### 创建微调任务
 
@@ -383,10 +432,12 @@ ts_model_train_and_finetune/
 │   │   ├── __init__.py
 │   │   ├── health.py        # 健康检查端点
 │   │   │                     # 作用：提供简单的健康检查接口，用于监控服务状态
-│   │   └── finetune.py      # 微调任务相关端点
-│   │                         # 作用：处理任务创建（POST /v1/finetune/jobs）、查询（GET /v1/finetune/jobs/{job_id}）、
-│   │                         #      结果获取（GET /v1/finetune/jobs/{job_id}/result）、日志查询（GET /v1/finetune/jobs/{job_id}/logs）、
-│   │                         #      任务取消（POST /v1/finetune/jobs/{job_id}/cancel）等API请求
+│   │   ├── finetune.py      # 微调任务相关端点
+│   │   │                     # 作用：处理任务创建（POST /v1/finetune/jobs）、查询（GET /v1/finetune/jobs/{job_id}）、
+│   │   │                     #      结果获取（GET /v1/finetune/jobs/{job_id}/result）、日志查询（GET /v1/finetune/jobs/{job_id}/logs）、
+│   │   │                     #      任务取消（POST /v1/finetune/jobs/{job_id}/cancel）等API请求
+│   │   └── tools.py         # 工具接口
+│   │                         # 作用：提供数据分析工具，如相关性矩阵计算（POST /v1/tools/correlation）
 │   ├── callbacks/           # 回调机制
 │   │   ├── __init__.py
 │   │   └── progress_callback.py  # 训练进度回调
