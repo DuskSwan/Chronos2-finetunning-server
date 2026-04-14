@@ -67,6 +67,21 @@ class CorrelationResponse(BaseModel):
     correlation_matrix: dict[str, dict[str, float | None]] = Field(
         description="相关性矩阵，值为 Pearson 相关系数或 null",
     )
+    '''
+    格式示例，假设传入的 CSV 文件包含两列 "a" 和 "c"，且它们高度相关：
+    {
+        "correlation_matrix": {
+            "a": {
+                "a": 1.0,
+                "c": 0.8
+            },
+            "c": {
+                "a": 0.8,
+                "c": 1.0
+            }
+        }
+    }
+    '''
 
 
 @router.post("/correlation", response_model=CorrelationResponse)
