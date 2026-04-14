@@ -201,12 +201,14 @@ def test_get_job_logs_success(client: TestClient, test_db_session, temp_base_dir
     assert "line3" in response.text
 
 
-def test_calculate_correlation_matrix(client: TestClient) -> None:
+def test_calculate_correlation_matrix(client: TestClient, temp_base_dir) -> None:
     """测试相关性矩阵接口。"""
-    csv_content = "a,b,c\n1,2,4\n2,3,5\n3,4,6\n"
+    csv_path = temp_base_dir / "test_data.csv"
+    csv_path.write_text("a,b,c\n1,2,4\n2,3,5\n3,4,6\n", encoding="utf-8")
+    
     response = client.post(
         "/v1/tools/correlation",
-        json={"csv_content": csv_content, "columns": ["a", "c"]},
+        json={"csv_path": str(csv_path), "columns": ["a", "c"]},
     )
 
     assert response.status_code == 200
@@ -216,12 +218,14 @@ def test_calculate_correlation_matrix(client: TestClient) -> None:
     assert data["correlation_matrix"]["a"]["c"] == pytest.approx(1.0)
 
 
-def test_calculate_correlation_matrix_spearman(client: TestClient) -> None:
+def test_calculate_correlation_matrix_spearman(client: TestClient, temp_base_dir) -> None:
     """测试 Spearman 相关性矩阵接口。"""
-    csv_content = "a,b,c\n1,2,4\n2,3,5\n3,4,6\n"
+    csv_path = temp_base_dir / "test_data_spearman.csv"
+    csv_path.write_text("a,b,c\n1,2,4\n2,3,5\n3,4,6\n", encoding="utf-8")
+    
     response = client.post(
         "/v1/tools/correlation",
-        json={"csv_content": csv_content, "columns": ["a", "c"], "method": "spearman"},
+        json={"csv_path": str(csv_path), "columns": ["a", "c"], "method": "spearman"},
     )
 
     assert response.status_code == 200
@@ -231,12 +235,14 @@ def test_calculate_correlation_matrix_spearman(client: TestClient) -> None:
     assert data["correlation_matrix"]["a"]["c"] == pytest.approx(1.0)
 
 
-def test_calculate_correlation_matrix_invalid_method(client: TestClient) -> None:
+def test_calculate_correlation_matrix_invalid_method(client: TestClient, temp_base_dir) -> None:
     """测试无效相关性计算方法。"""
-    csv_content = "a,b,c\n1,2,4\n2,3,5\n3,4,6\n"
+    csv_path = temp_base_dir / "test_data_invalid.csv"
+    csv_path.write_text("a,b,c\n1,2,4\n2,3,5\n3,4,6\n", encoding="utf-8")
+    
     response = client.post(
         "/v1/tools/correlation",
-        json={"csv_content": csv_content, "columns": ["a", "c"], "method": "invalid"},
+        json={"csv_path": str(csv_path), "columns": ["a", "c"], "method": "invalid"},
     )
 
     assert response.status_code == 422  # Validation error

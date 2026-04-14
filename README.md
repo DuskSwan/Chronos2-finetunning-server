@@ -137,7 +137,7 @@ curl http://127.0.0.1:8011/health
 curl -X POST http://127.0.0.1:8011/v1/tools/correlation \
   -H "Content-Type: application/json" \
   -d '{
-    "csv_content": "a,b,c\n1,2,4\n2,3,5\n3,4,6\n",
+    "csv_path": "/path/to/data.csv",
     "columns": ["a", "c"],
     "method": "pearson"
   }'
@@ -164,7 +164,7 @@ curl -X POST http://127.0.0.1:8011/v1/tools/correlation \
 
 | 参数 | 类型 | 默认值 | 说明 |
 | ---- | ---- | ------ | ---- |
-| `csv_content` | str | **必需** | CSV 格式的数据内容，必须包含表头行 |
+| `csv_path` | str | **必需** | CSV 文件路径 |
 | `columns` | list[str] | **必需** | 用于计算相关性的列名列表 |
 | `method` | str | "pearson" | 相关性计算方法：`"pearson"`、`"spearman"` 或 `"kendall"` |
 

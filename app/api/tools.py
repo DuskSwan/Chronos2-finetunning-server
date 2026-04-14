@@ -17,15 +17,15 @@ class CorrelationRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "csv_content": "value1,value2,value3\n1,2,3\n4,5,6\n",
+                "csv_path": "/path/to/data.csv",
                 "columns": ["value1", "value2"],
                 "method": "pearson",
             }
         }
     )
 
-    csv_content: str = Field(
-        description="CSV 数据内容，必须包含表头行",
+    csv_path: str = Field(
+        description="CSV 文件路径",
     )
     columns: list[str] = Field(
         description="用于计算相关性的列名列表",
@@ -35,11 +35,11 @@ class CorrelationRequest(BaseModel):
         description="相关性计算方法: 'pearson', 'spearman', 或 'kendall'",
     )
 
-    @field_validator("csv_content")
+    @field_validator("csv_path")
     @classmethod
-    def validate_csv_content(cls, v: str) -> str:
+    def validate_csv_path(cls, v: str) -> str:
         if not v or not v.strip():
-            raise ValueError("csv_content 不能为空")
+            raise ValueError("csv_path 不能为空")
         return v
 
     @field_validator("columns")
@@ -71,13 +71,13 @@ class CorrelationResponse(BaseModel):
 
 @router.post("/correlation", response_model=CorrelationResponse)
 async def calculate_correlation(request: CorrelationRequest) -> CorrelationResponse:
-    """根据传入的 CSV 数据和指定列计算相关性矩阵。"""
+    """根据传入的 CSV 文件路径和指定列计算相关性矩阵。"""
     try:
-        dataframe = pd.read_csv(StringIO(request.csv_content))
-    except (pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError) as exc:
+        dataframe = pd.read_csv(request.csv_path)
+    except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无法解析 csv_content: {exc}",
+            detail=f"无法读取或解析 CSV 文件: {exc}",
         )
 
     missing_columns = [column for column in request.columns if column not in dataframe.columns]
