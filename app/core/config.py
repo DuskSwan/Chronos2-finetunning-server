@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # 模型
     raw_model_cache_dir: str = "./data/model_cache"
-    device: str = "cpu"
+    device: str = "cuda"
     logging_steps: int = 100
     finetuned_ckpt_name: str = "finetuned-ckpt"
 
