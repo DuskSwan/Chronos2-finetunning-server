@@ -14,6 +14,11 @@ def load_local_model(model_path: Path|str = CHRONOS_PATH, device: str = "cpu") -
     """
     # 加载模型
     model_source = Path(model_path)
+    logger.info(
+        "加载 Chronos-2 本地模型: path=%s (cwd=%s)",
+        str(model_source.resolve()),
+        str(Path.cwd()),
+    )
     assert model_source.is_dir(), f'试图从 {model_source} 加载模型，但该路径不是目录'
     pipeline = Chronos2Pipeline.from_pretrained(
         model_source,
