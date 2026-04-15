@@ -11,7 +11,11 @@ from typing import Any, Dict, Optional, Literal, TypedDict
 
 from sqlalchemy.orm import Session
 
-from app.callbacks.progress_callback import ProgressCallback, CancelledError
+from app.callbacks.progress_callback import (
+    ProgressCallback,
+    TrainerProgressCallback,
+    CancelledError,
+)
 from app.services.dataset_service import prepare_input_data
 from app.services.model_service import load_local_model
 
@@ -165,21 +169,16 @@ def train_chronos2(
         )
         callback.check_cancel_requested()
 
-        # 创建一个轻量的回调适配器（Chronos-2 的回调接口可能不同）
-        class ChronosCallbackAdapter:
-            """适配 Chronos-2 的回调接口。"""
-
-            def __init__(self, progress_callback: ProgressCallback) -> None:
-                self.progress_callback = progress_callback
-
-            def on_step_end(self, step: int, loss: Optional[float] = None) -> None:
-                """每步结束时调用。"""
-                self.progress_callback.on_step_end(step, loss=loss)
-
-        callback_adapter = ChronosCallbackAdapter(callback)
-
         model_paths = []
         for i, input_dict in enumerate(train_inputs):
+            tar_col = selected_groups[i]["target"]
+            callback.on_group_start(
+                group_index=i,
+                total_groups=len(train_inputs),
+                target=tar_col,
+                group_max_steps=num_steps,
+            )
+
             # 调用微调
             fit_kwargs: Dict[str, Any] = dict(
                 inputs=[input_dict],
@@ -191,6 +190,9 @@ def train_chronos2(
                 context_length=context_length,
                 logging_steps=logging_steps,
                 finetune_mode=finetune_mode,
+                callbacks=[TrainerProgressCallback(callback)],
+                disable_tqdm=True,
+                remove_printer_callback=True,
                 # Note: extra kwargs 会进入 TrainingArguments
             )
             assert "finetune_mode" in inspect.signature(pipeline.fit).parameters
@@ -198,7 +200,6 @@ def train_chronos2(
             fine_tuned_pipeline = pipeline.fit(**fit_kwargs)
 
             # 6. 保存微调后的模型
-            tar_col = selected_groups[i]['target']
             model_save_path = output_dir_path / f"{finetuned_ckpt_name}_{tar_col}"
             model_save_path.mkdir(parents=True, exist_ok=True)
 
@@ -211,10 +212,10 @@ def train_chronos2(
             callback._write_log(f"模型保存成功")
 
             # 7. 记录训练完成
-            callback.on_step_end(step=min(total_steps, (i + 1) * num_steps), loss=None)
-            callback.on_training_end()
+            callback.on_group_end(model_path=str(model_save_path))
             model_paths.append( str(model_save_path) )
-        
+
+        callback.on_training_end()
         return model_paths
 
     except CancelledError as e:
