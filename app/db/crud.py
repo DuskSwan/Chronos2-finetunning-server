@@ -9,7 +9,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.enums import JobStatus
-from app.db.models import FinetuneJob
+from app.db.models import FinetuneJob, FinetuneJobLoss
 
 
 def create_job(
@@ -288,3 +288,48 @@ def mark_job_cancelled(
     db.commit()
     db.refresh(job)
     return job
+
+
+def upsert_job_loss_point(
+    db: Session,
+    job_id: str,
+    step: int,
+    loss: float,
+) -> FinetuneJobLoss:
+    """插入或更新任务的 loss 曲线点。"""
+    point = (
+        db.query(FinetuneJobLoss)
+        .filter(
+            FinetuneJobLoss.job_id == job_id,
+            FinetuneJobLoss.step == step,
+        )
+        .first()
+    )
+
+    if point is None:
+        point = FinetuneJobLoss(
+            job_id=job_id,
+            step=step,
+            loss=loss,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(point)
+    else:
+        point.loss = loss
+
+    db.commit()
+    db.refresh(point)
+    return point
+
+
+def list_job_loss_points(
+    db: Session,
+    job_id: str,
+) -> list[FinetuneJobLoss]:
+    """按 step 升序获取任务的 loss 曲线点。"""
+    return (
+        db.query(FinetuneJobLoss)
+        .filter(FinetuneJobLoss.job_id == job_id)
+        .order_by(FinetuneJobLoss.step.asc())
+        .all()
+    )

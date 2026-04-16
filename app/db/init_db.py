@@ -3,7 +3,6 @@
 """
 
 from sqlalchemy import inspect, text
-from sqlalchemy.orm import Session
 
 from app.db.models import Base
 from app.db.session import engine
@@ -24,10 +23,41 @@ def _ensure_model_paths_column() -> None:
         conn.execute(text("ALTER TABLE finetune_jobs ADD COLUMN model_paths TEXT"))
 
 
+def _ensure_finetune_job_losses_table() -> None:
+    """确保 finetune_job_losses 表存在。"""
+    inspector = inspect(engine)
+    if "finetune_job_losses" in inspector.get_table_names():
+        return
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS finetune_job_losses (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id VARCHAR(36) NOT NULL,
+                    step INTEGER NOT NULL,
+                    loss FLOAT NOT NULL,
+                    created_at DATETIME NOT NULL,
+                    CONSTRAINT uq_job_step UNIQUE (job_id, step),
+                    FOREIGN KEY(job_id) REFERENCES finetune_jobs(id) ON DELETE CASCADE
+                )
+                """
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_finetune_job_losses_job_id "
+                "ON finetune_job_losses(job_id)"
+            )
+        )
+
+
 def init_db() -> None:
     """初始化数据库表。"""
     Base.metadata.create_all(bind=engine)
     _ensure_model_paths_column()
+    _ensure_finetune_job_losses_table()
 
 
 def get_db_engine():
