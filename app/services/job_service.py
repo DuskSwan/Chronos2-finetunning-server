@@ -21,6 +21,7 @@ from app.db.crud import (
     list_recent_jobs,
     set_cancel_requested,
     mark_job_cancelled,
+    list_job_loss_points,
 )
 from app.core.enums import JobStatus
 from app.core.config import Settings
@@ -235,13 +236,22 @@ def get_job_result(db: Any, job_id: str) -> JobResultResponse:
         )
 
     model_paths = _deserialize_model_paths(job.model_paths)
+    loss_points = list_job_loss_points(db, job_id)
+    metrics = {
+        "loss_steps": [int(point.step) for point in loss_points],
+        "loss_values": [float(point.loss) for point in loss_points],
+        "loss_curve": [
+            {"step": int(point.step), "loss": float(point.loss)}
+            for point in loss_points
+        ],
+    }
 
     return JobResultResponse(
         job_id=job.id,
         status=job.status,
         output_dir=job.output_dir,
         model_paths=model_paths,
-        metrics={},
+        metrics=metrics,
     )
 
 

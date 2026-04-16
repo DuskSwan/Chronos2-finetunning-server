@@ -153,7 +153,49 @@ def test_get_job_result_completed(client: TestClient, test_db_session):
     assert data["status"] == "completed"
     assert data["output_dir"] == output_dir
     assert data["model_paths"] == [f"{output_dir}/finetuned-ckpt"]
-    assert data["metrics"] == {}
+    assert data["metrics"] == {
+        "loss_steps": [],
+        "loss_values": [],
+        "loss_curve": [],
+    }
+
+
+def test_get_job_result_with_loss_curve(client: TestClient, test_db_session):
+    """Test querying completed job result with loss curve data."""
+    job_id = "job-result-loss-1"
+    output_dir = "/tmp/output/job-result-loss-1"
+    log_path = "/tmp/output/job-result-loss-1/train.log"
+
+    crud.create_job(
+        db=test_db_session,
+        job_id=job_id,
+        status="queued",
+        request_json="{}",
+        output_dir=output_dir,
+        log_path=log_path,
+        max_steps=5,
+    )
+    crud.upsert_job_loss_point(test_db_session, job_id, step=1, loss=0.9)
+    crud.upsert_job_loss_point(test_db_session, job_id, step=2, loss=0.7)
+    crud.upsert_job_loss_point(test_db_session, job_id, step=3, loss=0.5)
+    crud.mark_job_completed(
+        db=test_db_session,
+        job_id=job_id,
+        model_paths=[f"{output_dir}/finetuned-ckpt"],
+        finished_at=datetime.now(timezone.utc),
+    )
+
+    response = client.get(f"/v1/finetune/jobs/{job_id}/result")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["job_id"] == job_id
+    assert data["metrics"]["loss_steps"] == [1, 2, 3]
+    assert data["metrics"]["loss_values"] == pytest.approx([0.9, 0.7, 0.5])
+    assert data["metrics"]["loss_curve"] == [
+        {"step": 1, "loss": pytest.approx(0.9)},
+        {"step": 2, "loss": pytest.approx(0.7)},
+        {"step": 3, "loss": pytest.approx(0.5)},
+    ]
 
 
 def test_get_job_result_not_completed(client: TestClient, test_db_session):

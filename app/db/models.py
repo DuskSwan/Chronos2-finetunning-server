@@ -5,7 +5,16 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, Integer, String, Boolean, Text
+from sqlalchemy import (
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Boolean,
+    Text,
+    ForeignKey,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, declarative_base, mapped_column
 
 Base = declarative_base()
@@ -35,3 +44,33 @@ class FinetuneJob(Base):
     
     def __repr__(self) -> str:
         return f"<FinetuneJob(id={self.id}, status={self.status})>"
+
+
+class FinetuneJobLoss(Base):
+    """微调任务损失曲线点。"""
+
+    __tablename__ = "finetune_job_losses"
+    __table_args__ = (
+        UniqueConstraint("job_id", "step", name="uq_job_step"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("finetune_jobs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step: Mapped[int] = mapped_column(Integer, nullable=False)
+    loss: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<FinetuneJobLoss(id={self.id}, job_id={self.job_id}, "
+            f"step={self.step}, loss={self.loss})>"
+        )

@@ -12,7 +12,7 @@ from transformers.trainer_callback import TrainerCallback
 
 from sqlalchemy.orm import Session
 
-from app.db.crud import update_job_progress, get_job_by_id
+from app.db.crud import update_job_progress, get_job_by_id, upsert_job_loss_point
 
 
 from loguru import logger
@@ -96,6 +96,13 @@ class ProgressCallback:
                 max_steps=self.max_steps,
                 last_loss=loss if loss is not None else self.last_loss,
             )
+            if loss is not None:
+                upsert_job_loss_point(
+                    db=self.db_session,
+                    job_id=self.job_id,
+                    step=step,
+                    loss=loss,
+                )
 
             # 记录到日志文件
             self._log_progress(step, loss, **kwargs)
