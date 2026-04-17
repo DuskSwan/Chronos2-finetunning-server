@@ -51,7 +51,7 @@ class FinetuneJobLoss(Base):
 
     __tablename__ = "finetune_job_losses"
     __table_args__ = (
-        UniqueConstraint("job_id", "step", name="uq_job_step"),
+        UniqueConstraint("job_id", "group_index", "step", name="uq_job_group_step"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -61,6 +61,7 @@ class FinetuneJobLoss(Base):
         nullable=False,
         index=True,
     )
+    group_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     step: Mapped[int] = mapped_column(Integer, nullable=False)
     loss: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

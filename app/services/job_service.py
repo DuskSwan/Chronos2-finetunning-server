@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 import json
 from datetime import datetime, timezone
+from collections import defaultdict
 
 from fastapi import HTTPException, status
 
@@ -237,12 +238,29 @@ def get_job_result(db: Any, job_id: str) -> JobResultResponse:
 
     model_paths = _deserialize_model_paths(job.model_paths)
     loss_points = list_job_loss_points(db, job_id)
+    grouped: dict[int, list[Any]] = defaultdict(list)
+    for point in loss_points:
+        grouped[int(point.group_index)].append(point)
+
+    group_count = len(model_paths or [])
+    if group_count == 0 and grouped:
+        group_count = max(grouped.keys()) + 1
+    ordered_groups = [grouped.get(idx, []) for idx in range(group_count)]
     metrics = {
-        "loss_steps": [int(point.step) for point in loss_points],
-        "loss_values": [float(point.loss) for point in loss_points],
+        "loss_steps": [
+            [int(point.step) for point in points]
+            for points in ordered_groups
+        ],
+        "loss_values": [
+            [float(point.loss) for point in points]
+            for points in ordered_groups
+        ],
         "loss_curve": [
-            {"step": int(point.step), "loss": float(point.loss)}
-            for point in loss_points
+            [
+                {"step": int(point.step), "loss": float(point.loss)}
+                for point in points
+            ]
+            for points in ordered_groups
         ],
     }
 

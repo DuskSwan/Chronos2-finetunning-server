@@ -97,10 +97,14 @@ class ProgressCallback:
                 last_loss=loss if loss is not None else self.last_loss,
             )
             if loss is not None:
+                group_step = step - self.active_group_base_step
+                if group_step <= 0:
+                    group_step = step
                 upsert_job_loss_point(
                     db=self.db_session,
                     job_id=self.job_id,
-                    step=step,
+                    group_index=self.active_group_index,
+                    step=group_step,
                     loss=loss,
                 )
 

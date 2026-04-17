@@ -293,6 +293,7 @@ def mark_job_cancelled(
 def upsert_job_loss_point(
     db: Session,
     job_id: str,
+    group_index: int,
     step: int,
     loss: float,
 ) -> FinetuneJobLoss:
@@ -301,6 +302,7 @@ def upsert_job_loss_point(
         db.query(FinetuneJobLoss)
         .filter(
             FinetuneJobLoss.job_id == job_id,
+            FinetuneJobLoss.group_index == group_index,
             FinetuneJobLoss.step == step,
         )
         .first()
@@ -309,6 +311,7 @@ def upsert_job_loss_point(
     if point is None:
         point = FinetuneJobLoss(
             job_id=job_id,
+            group_index=group_index,
             step=step,
             loss=loss,
             created_at=datetime.now(timezone.utc),
@@ -330,6 +333,6 @@ def list_job_loss_points(
     return (
         db.query(FinetuneJobLoss)
         .filter(FinetuneJobLoss.job_id == job_id)
-        .order_by(FinetuneJobLoss.step.asc())
+        .order_by(FinetuneJobLoss.group_index.asc(), FinetuneJobLoss.step.asc())
         .all()
     )

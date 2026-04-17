@@ -26,7 +26,7 @@
 - ✅ 数据集加载（支持 CSV 和 Parquet 格式）
 - ✅ 任务状态流转（queued → running → completed/failed）
 - ✅ 进度跟踪（current_step, max_steps, last_loss）
-- ✅ loss 曲线记录与结果返回（loss_steps, loss_values, loss_curve）
+- ✅ 按模型分组的 loss 曲线记录与结果返回（loss_steps, loss_values, loss_curve）
 - ✅ 任务查询接口（详情 / 结果 / 日志）
 - ✅ 任务取消接口（协作式取消）
 - ✅ CPU/CUDA 自动设备检测
@@ -323,21 +323,23 @@ curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/result
     "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
   ],
   "metrics": {
-    "loss_steps": [1, 2, 3],
-    "loss_values": [0.98, 0.76, 0.61],
+    "loss_steps": [[1, 2, 3]],
+    "loss_values": [[0.98, 0.76, 0.61]],
     "loss_curve": [
-      {
-        "step": 1,
-        "loss": 0.98
-      },
-      {
-        "step": 2,
-        "loss": 0.76
-      },
-      {
-        "step": 3,
-        "loss": 0.61
-      }
+      [
+        {
+          "step": 1,
+          "loss": 0.98
+        },
+        {
+          "step": 2,
+          "loss": 0.76
+        },
+        {
+          "step": 3,
+          "loss": 0.61
+        }
+      ]
     ]
   }
 }
@@ -551,7 +553,7 @@ ts_model_train_and_finetune/
 
 8. **进度更新** (`app/callbacks/progress_callback.py`)
    - 每隔指定步数更新数据库中的current_step和last_loss
-   - 每次拿到 loss 时写入 `finetune_job_losses` 曲线点（step, loss）
+   - 每次拿到 loss 时按组写入 `finetune_job_losses` 曲线点（group_index, step, loss）
    - 检查取消请求，如有则抛出异常终止训练
 
 9. **训练完成** (`app/services/trainer_service.py`)
@@ -589,13 +591,14 @@ ts_model_train_and_finetune/
 | ---- | ---- | ---- | ------ |
 | id | INTEGER | 否 | 自增 |
 | job_id | VARCHAR(36) | 否 | - |
+| group_index | INTEGER | 否 | 0 |
 | step | INTEGER | 否 | - |
 | loss | FLOAT | 否 | - |
 | created_at | DATETIME | 否 | 当前时间 |
 
 约束与索引：
 
-- 唯一约束：`(job_id, step)`（同一步会被更新覆盖，不会重复插入）
+- 唯一约束：`(job_id, group_index, step)`（同组同一步会被更新覆盖，不会重复插入）
 - 外键：`job_id -> finetune_jobs.id`
 - 索引：`job_id`
 
@@ -712,21 +715,23 @@ Content-Type: `application/json`
     "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
   ],
   "metrics": {
-    "loss_steps": [1, 2, 3],
-    "loss_values": [0.98, 0.76, 0.61],
+    "loss_steps": [[1, 2, 3]],
+    "loss_values": [[0.98, 0.76, 0.61]],
     "loss_curve": [
-      {
-        "step": 1,
-        "loss": 0.98
-      },
-      {
-        "step": 2,
-        "loss": 0.76
-      },
-      {
-        "step": 3,
-        "loss": 0.61
-      }
+      [
+        {
+          "step": 1,
+          "loss": 0.98
+        },
+        {
+          "step": 2,
+          "loss": 0.76
+        },
+        {
+          "step": 3,
+          "loss": 0.61
+        }
+      ]
     ]
   }
 }
@@ -831,7 +836,7 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 **第 4 步（已完成）**：任务查询接口
 
 - ✅ 任务查询端点（详情 / 结果 / 日志）
-- ✅ result 接口返回 loss 曲线指标（`loss_steps`/`loss_values`/`loss_curve`）
+- ✅ result 接口返回按模型分组的 loss 曲线指标（`loss_steps`/`loss_values`/`loss_curve`）
 
 **第 5 步（已完成）**：取消与辅助接口
 
