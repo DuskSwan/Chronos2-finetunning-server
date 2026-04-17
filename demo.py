@@ -67,12 +67,12 @@ def demo() -> None:
     print("\n[2] Create Fine-tuning Job")
     payload = {
         "train_data_path": str(DATA_FILE),
-        "prediction_length": 1,
-        "context_length": 2,
+        "prediction_length": 64,
+        "context_length": 512,
         "finetune_mode": "lora",
         "learning_rate": 1e-4,
-        "num_steps": 1,
-        "batch_size": 1,
+        "num_steps": 128,
+        "batch_size": 32,
         "selected_groups": SELECTED_GROUPS,
     }
     print("POST /v1/finetune/jobs")
