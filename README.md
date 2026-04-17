@@ -26,7 +26,7 @@
 - ✅ 数据集加载（支持 CSV 和 Parquet 格式）
 - ✅ 任务状态流转（queued → running → completed/failed）
 - ✅ 进度跟踪（current_step, max_steps, last_loss）
-- ✅ 按模型分组的 loss 曲线记录与结果返回（loss_steps, loss_values, loss_curve）
+- ✅ 按预测目标返回 loss 曲线（`metrics.<target> = [loss...]`）
 - ✅ 任务查询接口（详情 / 结果 / 日志）
 - ✅ 任务取消接口（协作式取消）
 - ✅ CPU/CUDA 自动设备检测
@@ -323,24 +323,7 @@ curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/result
     "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
   ],
   "metrics": {
-    "loss_steps": [[1, 2, 3]],
-    "loss_values": [[0.98, 0.76, 0.61]],
-    "loss_curve": [
-      [
-        {
-          "step": 1,
-          "loss": 0.98
-        },
-        {
-          "step": 2,
-          "loss": 0.76
-        },
-        {
-          "step": 3,
-          "loss": 0.61
-        }
-      ]
-    ]
+    "target": [0.98, 0.76, 0.61]
   }
 }
 ```
@@ -715,24 +698,7 @@ Content-Type: `application/json`
     "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
   ],
   "metrics": {
-    "loss_steps": [[1, 2, 3]],
-    "loss_values": [[0.98, 0.76, 0.61]],
-    "loss_curve": [
-      [
-        {
-          "step": 1,
-          "loss": 0.98
-        },
-        {
-          "step": 2,
-          "loss": 0.76
-        },
-        {
-          "step": 3,
-          "loss": 0.61
-        }
-      ]
-    ]
+    "target": [0.98, 0.76, 0.61]
   }
 }
 ```
@@ -836,7 +802,7 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 **第 4 步（已完成）**：任务查询接口
 
 - ✅ 任务查询端点（详情 / 结果 / 日志）
-- ✅ result 接口返回按模型分组的 loss 曲线指标（`loss_steps`/`loss_values`/`loss_curve`）
+- ✅ result 接口返回按预测目标组织的 loss 曲线（`metrics.<target> = [loss...]`）
 
 **第 5 步（已完成）**：取消与辅助接口
 

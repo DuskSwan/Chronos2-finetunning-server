@@ -45,6 +45,29 @@ def _deserialize_model_paths(value: Optional[str]) -> Optional[list[str]]:
     return None
 
 
+def _extract_group_targets(request_json: Optional[str]) -> list[str]:
+    """从请求 JSON 中提取 selected_groups 的 target 名称。"""
+    if not request_json:
+        return []
+    try:
+        payload = json.loads(request_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+    groups = payload.get("selected_groups")
+    if not isinstance(groups, list):
+        return []
+
+    targets: list[str] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        target = group.get("target")
+        if isinstance(target, str) and target.strip():
+            targets.append(target.strip())
+    return targets
+
+
 def create_finetune_job(
     request_data: Dict[str, Any],
     settings: Settings,
@@ -242,27 +265,22 @@ def get_job_result(db: Any, job_id: str) -> JobResultResponse:
     for point in loss_points:
         grouped[int(point.group_index)].append(point)
 
+    target_names = _extract_group_targets(job.request_json)
     group_count = len(model_paths or [])
+    if group_count == 0:
+        group_count = len(target_names)
     if group_count == 0 and grouped:
         group_count = max(grouped.keys()) + 1
-    ordered_groups = [grouped.get(idx, []) for idx in range(group_count)]
-    metrics = {
-        "loss_steps": [
-            [int(point.step) for point in points]
-            for points in ordered_groups
-        ],
-        "loss_values": [
-            [float(point.loss) for point in points]
-            for points in ordered_groups
-        ],
-        "loss_curve": [
-            [
-                {"step": int(point.step), "loss": float(point.loss)}
-                for point in points
-            ]
-            for points in ordered_groups
-        ],
-    }
+
+    metrics: dict[str, list[float]] = {}
+    for idx in range(group_count):
+        points = grouped.get(idx, [])
+        target = (
+            target_names[idx]
+            if idx < len(target_names)
+            else f"group_{idx + 1}"
+        )
+        metrics[target] = [float(point.loss) for point in points]
 
     return JobResultResponse(
         job_id=job.id,

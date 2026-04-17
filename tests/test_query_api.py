@@ -133,7 +133,7 @@ def test_get_job_result_completed(client: TestClient, test_db_session):
         db=test_db_session,
         job_id=job_id,
         status="queued",
-        request_json="{}",
+        request_json='{"selected_groups":[{"target":"target","covariates":[]}]}',
         output_dir=output_dir,
         log_path=log_path,
         max_steps=5,
@@ -154,9 +154,7 @@ def test_get_job_result_completed(client: TestClient, test_db_session):
     assert data["output_dir"] == output_dir
     assert data["model_paths"] == [f"{output_dir}/finetuned-ckpt"]
     assert data["metrics"] == {
-        "loss_steps": [[]],
-        "loss_values": [[]],
-        "loss_curve": [[]],
+        "target": [],
     }
 
 
@@ -170,7 +168,7 @@ def test_get_job_result_with_loss_curve(client: TestClient, test_db_session):
         db=test_db_session,
         job_id=job_id,
         status="queued",
-        request_json="{}",
+        request_json='{"selected_groups":[{"target":"target","covariates":[]}]}',
         output_dir=output_dir,
         log_path=log_path,
         max_steps=5,
@@ -189,13 +187,7 @@ def test_get_job_result_with_loss_curve(client: TestClient, test_db_session):
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == job_id
-    assert data["metrics"]["loss_steps"] == [[1, 2, 3]]
-    assert data["metrics"]["loss_values"] == [[0.9, 0.7, 0.5]]
-    assert data["metrics"]["loss_curve"] == [[
-        {"step": 1, "loss": pytest.approx(0.9)},
-        {"step": 2, "loss": pytest.approx(0.7)},
-        {"step": 3, "loss": pytest.approx(0.5)},
-    ]]
+    assert data["metrics"] == {"target": [0.9, 0.7, 0.5]}
 
 
 def test_get_job_result_with_multi_group_loss_curves(client: TestClient, test_db_session):
@@ -208,7 +200,12 @@ def test_get_job_result_with_multi_group_loss_curves(client: TestClient, test_db
         db=test_db_session,
         job_id=job_id,
         status="queued",
-        request_json="{}",
+        request_json=(
+            '{"selected_groups":['
+            '{"target":"target_a","covariates":[]},'
+            '{"target":"target_b","covariates":[]}'
+            ']}'
+        ),
         output_dir=output_dir,
         log_path=log_path,
         max_steps=6,
@@ -231,18 +228,10 @@ def test_get_job_result_with_multi_group_loss_curves(client: TestClient, test_db
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == job_id
-    assert data["metrics"]["loss_steps"] == [[1, 2], [1, 2]]
-    assert data["metrics"]["loss_values"] == [[0.9, 0.8], [0.6, 0.4]]
-    assert data["metrics"]["loss_curve"] == [
-        [
-            {"step": 1, "loss": pytest.approx(0.9)},
-            {"step": 2, "loss": pytest.approx(0.8)},
-        ],
-        [
-            {"step": 1, "loss": pytest.approx(0.6)},
-            {"step": 2, "loss": pytest.approx(0.4)},
-        ],
-    ]
+    assert data["metrics"] == {
+        "target_a": [0.9, 0.8],
+        "target_b": [0.6, 0.4],
+    }
 
 
 def test_get_job_result_not_completed(client: TestClient, test_db_session):
