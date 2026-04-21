@@ -20,13 +20,11 @@ from app.schemas.request import CreateFinetuneJobRequest
 from app.schemas.response import (
     CreateFinetuneJobResponse,
     JobDetailResponse,
-    JobResultResponse,
     JobListResponse,
     CancelJobResponse,
 )
 from app.services.job_service import (
     get_job_detail,
-    get_job_result,
     read_job_log,
     list_job_summaries,
     request_cancel_job,
@@ -188,18 +186,6 @@ async def get_finetune_job_detail(
 ) -> JobDetailResponse:
     """查询任务详情。"""
     return get_job_detail(db, job_id)
-
-
-@router.get(
-    "/jobs/{job_id}/result",
-    response_model=JobResultResponse,
-)
-async def get_finetune_job_result(
-    job_id: str,
-    db: Session = Depends(get_db),
-) -> JobResultResponse:
-    """查询任务结果。"""
-    return get_job_result(db, job_id)
 
 
 @router.get(

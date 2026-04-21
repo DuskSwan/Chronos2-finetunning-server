@@ -123,8 +123,8 @@ def test_get_job_detail_not_found(client: TestClient):
     assert response.status_code == 404
 
 
-def test_get_job_result_completed(client: TestClient, test_db_session):
-    """Test querying result of a completed job."""
+def test_get_job_detail_completed_with_loss_curve(client: TestClient, test_db_session):
+    """Test querying completed job detail with full loss curve data."""
     job_id = "job-result-1"
     output_dir = "/tmp/output/job-result-1"
     log_path = "/tmp/output/job-result-1/train.log"
@@ -146,20 +146,17 @@ def test_get_job_result_completed(client: TestClient, test_db_session):
         finished_at=datetime.now(timezone.utc),
     )
 
-    response = client.get(f"/v1/finetune/jobs/{job_id}/result")
+    response = client.get(f"/v1/finetune/jobs/{job_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == job_id
     assert data["status"] == "completed"
-    assert data["output_dir"] == output_dir
     assert data["model_paths"] == [f"{output_dir}/finetuned-ckpt"]
-    assert data["metrics"] == {
-        "target": [],
-    }
+    assert data["metrics"] == {}
 
 
-def test_get_job_result_with_loss_curve(client: TestClient, test_db_session):
-    """Test querying completed job result with loss curve data."""
+def test_get_job_detail_running_with_partial_loss_curve(client: TestClient, test_db_session):
+    """Test querying running job detail with partial loss curve data."""
     job_id = "job-result-loss-1"
     output_dir = "/tmp/output/job-result-loss-1"
     log_path = "/tmp/output/job-result-loss-1/train.log"
@@ -176,22 +173,22 @@ def test_get_job_result_with_loss_curve(client: TestClient, test_db_session):
     crud.upsert_job_loss_point(test_db_session, job_id, group_index=0, step=1, loss=0.9)
     crud.upsert_job_loss_point(test_db_session, job_id, group_index=0, step=2, loss=0.7)
     crud.upsert_job_loss_point(test_db_session, job_id, group_index=0, step=3, loss=0.5)
-    crud.mark_job_completed(
+    crud.update_job_status(
         db=test_db_session,
         job_id=job_id,
-        model_paths=[f"{output_dir}/finetuned-ckpt"],
-        finished_at=datetime.now(timezone.utc),
+        status="running",
+        started_at=datetime.now(timezone.utc),
     )
 
-    response = client.get(f"/v1/finetune/jobs/{job_id}/result")
+    response = client.get(f"/v1/finetune/jobs/{job_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == job_id
     assert data["metrics"] == {"target": [0.9, 0.7, 0.5]}
 
 
-def test_get_job_result_with_multi_group_loss_curves(client: TestClient, test_db_session):
-    """Test querying completed job result with multi-group loss curves."""
+def test_get_job_detail_completed_with_multi_group_loss_curves(client: TestClient, test_db_session):
+    """Test querying completed job detail with multi-group loss curves."""
     job_id = "job-result-loss-2"
     output_dir = "/tmp/output/job-result-loss-2"
     log_path = "/tmp/output/job-result-loss-2/train.log"
@@ -224,7 +221,7 @@ def test_get_job_result_with_multi_group_loss_curves(client: TestClient, test_db
         finished_at=datetime.now(timezone.utc),
     )
 
-    response = client.get(f"/v1/finetune/jobs/{job_id}/result")
+    response = client.get(f"/v1/finetune/jobs/{job_id}")
     assert response.status_code == 200
     data = response.json()
     assert data["job_id"] == job_id
@@ -234,8 +231,8 @@ def test_get_job_result_with_multi_group_loss_curves(client: TestClient, test_db
     }
 
 
-def test_get_job_result_not_completed(client: TestClient, test_db_session):
-    """Test querying result of a non-completed job."""
+def test_get_job_detail_queued_returns_empty_metrics(client: TestClient, test_db_session):
+    """Test querying queued job detail returns empty metrics."""
     job_id = "job-result-2"
     output_dir = "/tmp/output/job-result-2"
     log_path = "/tmp/output/job-result-2/train.log"
@@ -250,8 +247,51 @@ def test_get_job_result_not_completed(client: TestClient, test_db_session):
         max_steps=5,
     )
 
-    response = client.get(f"/v1/finetune/jobs/{job_id}/result")
-    assert response.status_code == 409
+    response = client.get(f"/v1/finetune/jobs/{job_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "queued"
+    assert data["metrics"] == {}
+
+
+def test_get_job_detail_failed_and_cancelled_return_available_metrics(
+    client: TestClient, test_db_session
+):
+    """Test failed/cancelled job details return available loss points."""
+    failed_id = "job-failed-1"
+    cancelled_id = "job-cancelled-1"
+
+    for job_id, status in [(failed_id, "failed"), (cancelled_id, "cancelled")]:
+        crud.create_job(
+            db=test_db_session,
+            job_id=job_id,
+            status="queued",
+            request_json='{"selected_groups":[{"target":"target","covariates":[]}]}',
+            output_dir=f"/tmp/output/{job_id}",
+            log_path=f"/tmp/output/{job_id}/train.log",
+            max_steps=5,
+        )
+        crud.upsert_job_loss_point(test_db_session, job_id, group_index=0, step=1, loss=0.9)
+        crud.upsert_job_loss_point(test_db_session, job_id, group_index=0, step=2, loss=0.6)
+        if status == "failed":
+            crud.mark_job_failed(
+                db=test_db_session,
+                job_id=job_id,
+                error_message="mock error",
+                finished_at=datetime.now(timezone.utc),
+            )
+        else:
+            crud.mark_job_cancelled(
+                db=test_db_session,
+                job_id=job_id,
+                finished_at=datetime.now(timezone.utc),
+            )
+
+        response = client.get(f"/v1/finetune/jobs/{job_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == status
+        assert data["metrics"] == {"target": [0.9, 0.6]}
 
 
 def test_get_job_logs_success(client: TestClient, test_db_session, temp_base_dir):

@@ -29,7 +29,6 @@ from app.core.config import Settings
 from app.schemas.response import (
     JobDetailResponse,
     JobProgressResponse,
-    JobResultResponse,
     JobListItemResponse,
     JobListResponse,
     CancelJobResponse,
@@ -66,6 +65,29 @@ def _extract_group_targets(request_json: Optional[str]) -> list[str]:
         if isinstance(target, str) and target.strip():
             targets.append(target.strip())
     return targets
+
+
+def _build_loss_metrics(db: Any, job_id: str, request_json: Optional[str]) -> dict[str, list[float]]:
+    """构建任务 loss 曲线，按 target 名称返回。"""
+    loss_points = list_job_loss_points(db, job_id)
+    if not loss_points:
+        return {}
+
+    grouped: dict[int, list[Any]] = defaultdict(list)
+    for point in loss_points:
+        grouped[int(point.group_index)].append(point)
+
+    target_names = _extract_group_targets(request_json)
+    metrics: dict[str, list[float]] = {}
+    for group_index in sorted(grouped.keys()):
+        target = (
+            target_names[group_index]
+            if group_index < len(target_names)
+            else f"group_{group_index + 1}"
+        )
+        metrics[target] = [float(point.loss) for point in grouped[group_index]]
+
+    return metrics
 
 
 def create_finetune_job(
@@ -233,61 +255,7 @@ def get_job_detail(db: Any, job_id: str) -> JobDetailResponse:
         error_message=job.error_message,
         log_path=job.log_path,
         model_paths=model_paths,
-    )
-
-
-def get_job_result(db: Any, job_id: str) -> JobResultResponse:
-    """获取任务结果。
-
-    Args:
-        db: 数据库会话。
-        job_id: 任务 ID。
-
-    Returns:
-        任务结果响应。
-    """
-    job = get_job_by_id(db, job_id)
-    if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"任务不存在: {job_id}",
-        )
-
-    if job.status != JobStatus.completed.value:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"任务未完成，当前状态: {job.status}",
-        )
-
-    model_paths = _deserialize_model_paths(job.model_paths)
-    loss_points = list_job_loss_points(db, job_id)
-    grouped: dict[int, list[Any]] = defaultdict(list)
-    for point in loss_points:
-        grouped[int(point.group_index)].append(point)
-
-    target_names = _extract_group_targets(job.request_json)
-    group_count = len(model_paths or [])
-    if group_count == 0:
-        group_count = len(target_names)
-    if group_count == 0 and grouped:
-        group_count = max(grouped.keys()) + 1
-
-    metrics: dict[str, list[float]] = {}
-    for idx in range(group_count):
-        points = grouped.get(idx, [])
-        target = (
-            target_names[idx]
-            if idx < len(target_names)
-            else f"group_{idx + 1}"
-        )
-        metrics[target] = [float(point.loss) for point in points]
-
-    return JobResultResponse(
-        job_id=job.id,
-        status=job.status,
-        output_dir=job.output_dir,
-        model_paths=model_paths,
-        metrics=metrics,
+        metrics=_build_loss_metrics(db, job_id, job.request_json),
     )
 
 
