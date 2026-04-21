@@ -27,7 +27,7 @@
 - ✅ 任务状态流转（queued → running → completed/failed）
 - ✅ 进度跟踪（current_step, max_steps, last_loss）
 - ✅ 按预测目标返回 loss 曲线（`metrics.<target> = [loss...]`）
-- ✅ 任务查询接口（详情 / 结果 / 日志）
+- ✅ 任务查询接口（详情 / 日志）
 - ✅ 任务取消接口（协作式取消）
 - ✅ CPU/CUDA 自动设备检测
 - ✅ **工具接口**（相关性矩阵计算）
@@ -278,7 +278,7 @@ value1,value2,value3
 
 ### 查询任务状态
 
-当前版本已支持任务查询接口，包括详情、结果和日志：
+当前版本已支持任务查询接口，包括详情和日志：
 
 1) 查询任务详情
 
@@ -303,28 +303,6 @@ curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>
   "error_message": null,
   "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
   "model_paths": null
-}
-```
-
-1) 查询任务结果（仅完成后可用）
-
-```bash
-curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/result
-```
-
-响应示例：
-
-```json
-{
-  "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "output_dir": "./artifacts/550e8400-e29b-41d4-a716-446655440000",
-  "model_paths": [
-    "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
-  ],
-  "metrics": {
-    "target": [0.98, 0.76, 0.61]
-  }
 }
 ```
 
@@ -368,10 +346,11 @@ curl -X POST http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/cancel
 }
 ```
 
-result 接口与 detail 接口的区别
+`/v1/finetune/jobs/{job_id}` 会在详情中直接返回 loss 曲线（`metrics`）：
 
-- `detail`（`/v1/finetune/jobs/{job_id}`）：用于查询任务实时状态、进度和错误信息，任何状态都可用。
-- `result`（`/v1/finetune/jobs/{job_id}/result`）：仅在任务完成后返回模型输出与指标，否则返回 4xx。
+- `queued`：返回空字典 `{}`。
+- `running` / `failed` / `cancelled`：返回当前已写入数据库的部分曲线。
+- `completed`：返回完整曲线。
 
 ### 任务目录结构
 
@@ -437,7 +416,7 @@ ts_model_train_and_finetune/
 │   │   │                     # 作用：提供简单的健康检查接口，用于监控服务状态
 │   │   ├── finetune.py      # 微调任务相关端点
 │   │   │                     # 作用：处理任务创建（POST /v1/finetune/jobs）、查询（GET /v1/finetune/jobs/{job_id}）、
-│   │   │                     #      结果获取（GET /v1/finetune/jobs/{job_id}/result）、日志查询（GET /v1/finetune/jobs/{job_id}/logs）、
+│   │   │                     #      日志查询（GET /v1/finetune/jobs/{job_id}/logs）、
 │   │   │                     #      任务取消（POST /v1/finetune/jobs/{job_id}/cancel）等API请求
 │   │   └── tools.py         # 工具接口
 │   │                         # 作用：提供数据分析工具，如相关性矩阵计算（POST /v1/tools/correlation）
@@ -661,7 +640,7 @@ Content-Type: `application/json`
 
 ### GET /v1/finetune/jobs/{job_id}
 
-用途: 查询任务详情与进度  
+用途: 查询任务详情、进度和 loss 曲线  
 响应 200:
 
 ```json
@@ -678,32 +657,20 @@ Content-Type: `application/json`
   },
   "error_message": null,
   "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
-  "model_paths": null
-}
-```
-
-常见错误: 404（任务不存在）
-
-### GET /v1/finetune/jobs/{job_id}/result
-
-用途: 查询任务结果（仅完成后可用）  
-响应 200:
-
-```json
-{
-  "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "output_dir": "./artifacts/550e8400-e29b-41d4-a716-446655440000",
-  "model_paths": [
-    "./artifacts/550e8400-e29b-41d4-a716-446655440000/finetuned-ckpt_target"
-  ],
+  "model_paths": null,
   "metrics": {
     "target": [0.98, 0.76, 0.61]
   }
 }
 ```
 
-常见错误: 409（任务未完成），404（任务不存在）
+`metrics` 字段说明：
+
+- `queued`：`{}`
+- `running` / `failed` / `cancelled`：返回当前可查询到的曲线点
+- `completed`：返回完整曲线
+
+常见错误: 404（任务不存在）
 
 ### GET /v1/finetune/jobs/{job_id}/logs
 
@@ -801,8 +768,8 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 
 **第 4 步（已完成）**：任务查询接口
 
-- ✅ 任务查询端点（详情 / 结果 / 日志）
-- ✅ result 接口返回按预测目标组织的 loss 曲线（`metrics.<target> = [loss...]`）
+- ✅ 任务查询端点（详情 / 日志）
+- ✅ 详情接口返回按预测目标组织的 loss 曲线（`metrics.<target> = [loss...]`）
 
 **第 5 步（已完成）**：取消与辅助接口
 
