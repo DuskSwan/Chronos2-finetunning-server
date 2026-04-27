@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
+from loguru import logger
 
 from app.core.config import get_settings
 from app.core.enums import JobStatus, FinetuneMode
@@ -130,6 +131,7 @@ async def create_finetune_job(
     
     # 生成 job_id
     job_id = str(uuid.uuid4())
+    logger.info(f"收到新的训练任务请求，已创建任务 ID: {job_id}")
     
     # 获取设置
     settings = get_settings()
