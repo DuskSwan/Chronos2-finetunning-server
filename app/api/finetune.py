@@ -3,6 +3,7 @@
 """
 
 import json
+import shutil
 import uuid
 from pathlib import Path
 
@@ -15,14 +16,15 @@ from loguru import logger
 from app.core.config import get_settings
 from app.core.enums import JobStatus, FinetuneMode
 from app.core.paths import ensure_dir
-from app.db.crud import create_job
+from app.db.crud import create_job, get_job_by_id
 from app.db.session import get_db
-from app.schemas.request import CreateFinetuneJobRequest
+from app.schemas.request import CreateFinetuneJobRequest, ReleaseModelRequest
 from app.schemas.response import (
     CreateFinetuneJobResponse,
     JobDetailResponse,
     JobListResponse,
     CancelJobResponse,
+    ReleaseModelResponse,
 )
 from app.services.job_service import (
     get_job_detail,
@@ -226,3 +228,63 @@ async def cancel_finetune_job(
 ) -> CancelJobResponse:
     """取消任务（协作式取消）。"""
     return request_cancel_job(db, job_id)
+
+
+@router.post(
+    "/jobs/release",
+    response_model=ReleaseModelResponse,
+)
+async def release_finetuned_model(
+    request: ReleaseModelRequest,
+    db: Session = Depends(get_db),
+) -> ReleaseModelResponse:
+    """发布已训练完成的模型目录。"""
+    job = get_job_by_id(db, request.task_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"任务不存在: {request.task_id}",
+        )
+
+    if job.status != JobStatus.completed.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"仅支持发布已完成任务，当前状态: {job.status}",
+        )
+
+    if not job.output_dir:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="模型目录不存在",
+        )
+
+    source_dir = Path(job.output_dir)
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"模型目录不存在: {source_dir}",
+        )
+
+    release_name = f"{request.user_id}_{request.task_id}_{request.version}"
+    settings = get_settings()
+    release_root = ensure_dir(settings.release_path_resolved)
+    release_dir = release_root / release_name
+    if release_dir.exists():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"发布目录已存在: {release_dir}",
+        )
+
+    try:
+        shutil.copytree(src=source_dir, dst=release_dir)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"发布模型失败: {exc}",
+        ) from exc
+
+    return ReleaseModelResponse(
+        release_name=release_name,
+        release_dir=str(release_dir.resolve()),
+        source_dir=str(source_dir.resolve()),
+    )

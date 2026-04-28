@@ -28,3 +28,4 @@ logs/
 .ruff_cache/
 
 chronos-2-finetuned/
+release/

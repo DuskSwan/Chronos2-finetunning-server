@@ -178,3 +178,18 @@ class CreateFinetuneJobRequest(BaseModel):
         if len(unique_targets) != len(targets):
             raise ValueError("selected_groups.target 不能包含重复项")
         return v
+
+
+class ReleaseModelRequest(BaseModel):
+    """发布模型请求。"""
+
+    user_id: str = Field(description="用户 ID")
+    task_id: str = Field(description="任务 ID")
+    version: str = Field(description="版本号")
+
+    @field_validator("user_id", "task_id", "version")
+    @classmethod
+    def validate_non_empty_text(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("字段不能为空")
+        return v.strip()

@@ -44,6 +44,7 @@ def test_settings(temp_base_dir):
         sqlite_db_path=str(db_path),
         artifacts_root=str(artifacts_dir),
         logs_root=str(logs_dir),
+        release_path=str(temp_base_dir / "release"),
     )
 
 
@@ -69,10 +70,12 @@ def client(test_settings, test_db_session):
         yield test_db_session
 
     with patch("app.main.get_settings", return_value=test_settings):
-        with patch("app.main.initialize_worker", lambda *_args, **_kwargs: None):
-            app = create_app()
-            app.dependency_overrides[get_db] = get_test_db
-            return TestClient(app)
+        with patch("app.api.finetune.get_settings", return_value=test_settings):
+            with patch("app.main.initialize_worker", lambda *_args, **_kwargs: None):
+                app = create_app()
+                app.dependency_overrides[get_db] = get_test_db
+                with TestClient(app) as test_client:
+                    yield test_client
 
 
 def test_get_job_detail_success(client: TestClient, test_db_session):
@@ -364,3 +367,109 @@ def test_calculate_correlation_matrix_invalid_method(client: TestClient, temp_ba
     )
 
     assert response.status_code == 422  # Validation error
+
+
+def test_release_finetuned_model_success(client: TestClient, test_db_session, temp_base_dir):
+    """Test releasing a completed model directory."""
+    task_id = "release-job-1"
+    model_dir = temp_base_dir / "artifacts" / task_id
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "weights.bin").write_text("dummy", encoding="utf-8")
+    (model_dir / "config.json").write_text('{"a":1}', encoding="utf-8")
+
+    crud.create_job(
+        db=test_db_session,
+        job_id=task_id,
+        status="queued",
+        request_json="{}",
+        output_dir=str(model_dir),
+        log_path=str(temp_base_dir / "logs" / f"{task_id}.log"),
+        max_steps=3,
+    )
+    crud.mark_job_completed(
+        db=test_db_session,
+        job_id=task_id,
+        model_paths=[str(model_dir)],
+        finished_at=datetime.now(timezone.utc),
+    )
+
+    response = client.post(
+        "/v1/finetune/jobs/release",
+        json={"user_id": "u001", "task_id": task_id, "version": "v1"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["release_name"] == f"u001_{task_id}_v1"
+    release_dir = Path(body["release_dir"])
+    assert release_dir.exists()
+    assert (release_dir / "weights.bin").exists()
+    assert (release_dir / "config.json").exists()
+
+
+def test_release_finetuned_model_not_found(client: TestClient):
+    """Test release with non-existent task id."""
+    response = client.post(
+        "/v1/finetune/jobs/release",
+        json={"user_id": "u001", "task_id": "not-exist", "version": "v1"},
+    )
+    assert response.status_code == 404
+
+
+def test_release_finetuned_model_not_completed(client: TestClient, test_db_session, temp_base_dir):
+    """Test release when task is not completed."""
+    task_id = "release-job-2"
+    model_dir = temp_base_dir / "artifacts" / task_id
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    crud.create_job(
+        db=test_db_session,
+        job_id=task_id,
+        status="running",
+        request_json="{}",
+        output_dir=str(model_dir),
+        log_path=str(temp_base_dir / "logs" / f"{task_id}.log"),
+        max_steps=3,
+    )
+
+    response = client.post(
+        "/v1/finetune/jobs/release",
+        json={"user_id": "u001", "task_id": task_id, "version": "v1"},
+    )
+    assert response.status_code == 409
+
+
+def test_release_finetuned_model_conflict_when_target_exists(
+    client: TestClient,
+    test_db_session,
+    temp_base_dir,
+):
+    """Test release conflict when target directory already exists."""
+    task_id = "release-job-3"
+    model_dir = temp_base_dir / "artifacts" / task_id
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "weights.bin").write_text("dummy", encoding="utf-8")
+
+    crud.create_job(
+        db=test_db_session,
+        job_id=task_id,
+        status="queued",
+        request_json="{}",
+        output_dir=str(model_dir),
+        log_path=str(temp_base_dir / "logs" / f"{task_id}.log"),
+        max_steps=3,
+    )
+    crud.mark_job_completed(
+        db=test_db_session,
+        job_id=task_id,
+        model_paths=[str(model_dir)],
+        finished_at=datetime.now(timezone.utc),
+    )
+
+    precreated_release_dir = temp_base_dir / "release" / f"u001_{task_id}_v1"
+    precreated_release_dir.mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        "/v1/finetune/jobs/release",
+        json={"user_id": "u001", "task_id": task_id, "version": "v1"},
+    )
+    assert response.status_code == 409

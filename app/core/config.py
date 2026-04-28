@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # 路径
     artifacts_root: str = "./artifacts"
     logs_root: str = "./logs"
+    release_path: str = "./release"
 
     # 模型
     raw_model_cache_dir: str = "./data/model_cache"
@@ -49,6 +50,11 @@ class Settings(BaseSettings):
     def logs_root_resolved(self) -> Path:
         """获取解析后的日志根目录路径。"""
         return Path(self.logs_root).resolve()
+
+    @property
+    def release_path_resolved(self) -> Path:
+        """获取解析后的发布目录路径。"""
+        return Path(self.release_path).resolve()
 
 
 def get_settings() -> Settings:
