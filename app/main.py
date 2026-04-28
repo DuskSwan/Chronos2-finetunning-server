@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import health, finetune, tools, train_jobs
+from app.api import health, finetune, tools, train_jobs, model_publish
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.paths import ensure_dir
@@ -26,6 +26,9 @@ from loguru import logger
 
 def _is_spec_route(request: Request) -> bool:
     return request.url.path.startswith("/api/v1/train_jobs")
+
+def _is_model_publish_route(request: Request) -> bool:
+    return request.url.path == "/api/model/publish"
 
 
 def register_spec_exception_handlers(app: FastAPI) -> None:
@@ -45,6 +48,13 @@ def register_spec_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
+        if _is_model_publish_route(request):
+            first = exc.errors()[0] if exc.errors() else {}
+            msg = first.get("msg", "invalid parameter")
+            return JSONResponse(
+                status_code=200,
+                content={"code": 500, "message": msg, "data": None},
+            )
         if not _is_spec_route(request):
             return await request_validation_exception_handler(request, exc)
         err = normalize_api_error(exc)
@@ -119,6 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(finetune.router)
     app.include_router(tools.router)
     app.include_router(train_jobs.router)
+    app.include_router(model_publish.router)
     
     return app
 

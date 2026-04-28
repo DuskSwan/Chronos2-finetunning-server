@@ -85,3 +85,17 @@ class ReleaseModelResponse(BaseModel):
     code: int = Field(description="业务状态码，0 表示成功")
     message: str = Field(description="结果描述")
     data: ReleaseModelData = Field(description="响应数据体")
+
+
+class ModelPublishData(BaseModel):
+    """模型发布接口 data。"""
+
+    model_path: str = Field(description="模型文件相对路径")
+
+
+class ModelPublishResponse(BaseModel):
+    """模型发布接口响应。"""
+
+    code: int = Field(description="业务状态码")
+    message: str = Field(description="结果描述")
+    data: ModelPublishData | None = Field(description="响应数据")

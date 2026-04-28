@@ -29,6 +29,8 @@
 - ✅ 按预测目标返回 loss 曲线（`metrics.<target> = [loss...]`）
 - ✅ 任务查询接口（详情 / 日志）
 - ✅ 任务取消接口（协作式取消）
+- ✅ 模型发布接口（按 `user_id + job_id + version` 发布，可重复调用覆盖）
+- ✅ 规范兼容接口（`/api/v1/train_jobs*`，统一 `code/message/data`）
 - ✅ CPU/CUDA 自动设备检测
 - ✅ **工具接口**（相关性矩阵计算）
 
@@ -390,6 +392,10 @@ SQLITE_DB_PATH=./data/finetune.db
 # 路径
 ARTIFACTS_ROOT=./artifacts
 LOGS_ROOT=./logs
+RELEASE_PATH=./release
+
+# 规范兼容接口鉴权（为空表示不启用校验）
+API_BEARER_TOKEN=
 
 # 设备
 DEVICE=cpu
@@ -417,7 +423,8 @@ ts_model_train_and_finetune/
 │   │   ├── finetune.py      # 微调任务相关端点
 │   │   │                     # 作用：处理任务创建（POST /v1/finetune/jobs）、查询（GET /v1/finetune/jobs/{job_id}）、
 │   │   │                     #      日志查询（GET /v1/finetune/jobs/{job_id}/logs）、
-│   │   │                     #      任务取消（POST /v1/finetune/jobs/{job_id}/cancel）等API请求
+│   │   │                     #      任务取消（POST /v1/finetune/jobs/{job_id}/cancel）、
+│   │   │                     #      模型发布（POST /v1/finetune/jobs/release）等API请求
 │   │   └── tools.py         # 工具接口
 │   │                         # 作用：提供数据分析工具，如相关性矩阵计算（POST /v1/tools/correlation）
 │   ├── callbacks/           # 回调机制
@@ -571,7 +578,9 @@ ts_model_train_and_finetune/
 Base URL: `http://127.0.0.1:8011`  
 Content-Type: `application/json`  
 时间字段: ISO 8601（UTC）  
-认证: 无
+认证:
+- 旧接口（`/v1/finetune/*`, `/v1/tools/*`, `/health`）默认无认证
+- 规范兼容接口（`/api/v1/train_jobs*`）支持 Bearer Token（`API_BEARER_TOKEN` 非空时启用）
 
 ### 任务状态
 
@@ -701,6 +710,68 @@ Content-Type: `application/json`
 ```
 
 常见错误: 409（状态不允许取消），404（任务不存在）
+
+
+### POST /v1/finetune/jobs/release
+
+用途: 发布已训练完成的模型目录到 `RELEASE_PATH` 下。  
+请求体:
+
+| 字段 | 类型 | 必需 | 说明 |
+| ---- | ---- | ---- | ---- |
+| `user_id` | string | 是 | 用户 ID |
+| `job_id` | string | 是 | 已训练任务 ID |
+| `version` | string | 是 | 版本号 |
+
+发布目录名规则：`<user_id>_<job_id>_<version>`
+
+行为说明：
+- 任务必须存在且状态为 `completed`。
+- 会复制该任务的 `output_dir` 整个目录。
+- 若目标目录已存在，会先删除再复制（覆盖发布）。
+
+响应 200（成功）：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "model_path": "/abs/path/to/release/u001_<job_id>_v1"
+  }
+}
+```
+
+响应 200（业务失败示例）：
+
+```json
+{
+  "code": 401,
+  "message": "invalid parameter",
+  "data": {
+    "model_path": ""
+  }
+}
+```
+
+业务码说明：
+- `0`: success
+- `401`: invalid parameter
+- `404`: job/model directory not found
+- `409`: job status not completed
+- `500`: release failed
+
+### 规范兼容接口（新增）
+
+用于对齐外部接口规范，保留旧接口不变。
+
+- `POST /api/v1/train_jobs`
+- `GET /api/v1/train_jobs/{job_id}`
+
+特性：
+- Bearer Token 鉴权（通过 `API_BEARER_TOKEN` 配置；为空时不校验）。
+- 统一返回结构：`{code, message, data}`。
+- 状态映射：内部 `queued` 对外映射为 `pending`。
 
 ## 测试
 

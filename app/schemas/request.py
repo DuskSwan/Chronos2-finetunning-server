@@ -3,6 +3,7 @@
 """
 
 from typing import Optional
+import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -186,3 +187,25 @@ class ReleaseModelRequest(BaseModel):
     user_id: Optional[str] = Field(default=None, description="用户 ID")
     job_id: Optional[str] = Field(default=None, description="任务 ID")
     version: Optional[str] = Field(default=None, description="版本号")
+
+
+class ModelPublishRequest(BaseModel):
+    """模型发布兼容接口请求。"""
+
+    user_id: int = Field(description="用户唯一标识 ID")
+    version: str = Field(description="语义化版本号，格式 x.y.z")
+    job_id: str = Field(description="训练任务 ID")
+
+    @field_validator("version")
+    @classmethod
+    def validate_version(cls, v: str) -> str:
+        if not re.fullmatch(r"\d+\.\d+\.\d+", v):
+            raise ValueError("invalid version format, expected x.y.z")
+        return v
+
+    @field_validator("job_id")
+    @classmethod
+    def validate_job_id(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("job_id is required")
+        return v.strip()
