@@ -395,12 +395,13 @@ def test_release_finetuned_model_success(client: TestClient, test_db_session, te
 
     response = client.post(
         "/v1/finetune/jobs/release",
-        json={"user_id": "u001", "task_id": task_id, "version": "v1"},
+        json={"user_id": "u001", "job_id": task_id, "version": "v1"},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["release_name"] == f"u001_{task_id}_v1"
-    release_dir = Path(body["release_dir"])
+    assert body["code"] == 0
+    assert body["message"] == "success"
+    release_dir = Path(body["data"]["model_path"])
     assert release_dir.exists()
     assert (release_dir / "weights.bin").exists()
     assert (release_dir / "config.json").exists()
@@ -410,9 +411,12 @@ def test_release_finetuned_model_not_found(client: TestClient):
     """Test release with non-existent task id."""
     response = client.post(
         "/v1/finetune/jobs/release",
-        json={"user_id": "u001", "task_id": "not-exist", "version": "v1"},
+        json={"user_id": "u001", "job_id": "not-exist", "version": "v1"},
     )
-    assert response.status_code == 404
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 404
+    assert "job not found" in body["message"]
 
 
 def test_release_finetuned_model_not_completed(client: TestClient, test_db_session, temp_base_dir):
@@ -433,9 +437,11 @@ def test_release_finetuned_model_not_completed(client: TestClient, test_db_sessi
 
     response = client.post(
         "/v1/finetune/jobs/release",
-        json={"user_id": "u001", "task_id": task_id, "version": "v1"},
+        json={"user_id": "u001", "job_id": task_id, "version": "v1"},
     )
-    assert response.status_code == 409
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 409
 
 
 def test_release_finetuned_model_conflict_when_target_exists(
@@ -470,6 +476,20 @@ def test_release_finetuned_model_conflict_when_target_exists(
 
     response = client.post(
         "/v1/finetune/jobs/release",
-        json={"user_id": "u001", "task_id": task_id, "version": "v1"},
+        json={"user_id": "u001", "job_id": task_id, "version": "v1"},
     )
-    assert response.status_code == 409
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 409
+
+
+def test_release_finetuned_model_invalid_parameter_returns_401(client: TestClient):
+    """Test release with invalid parameters."""
+    response = client.post(
+        "/v1/finetune/jobs/release",
+        json={"user_id": "u001", "job_id": "", "version": "v1"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 401
+    assert body["message"] == "invalid parameter"

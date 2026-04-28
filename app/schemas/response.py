@@ -73,9 +73,15 @@ class CancelJobResponse(BaseModel):
     message: Optional[str] = Field(default=None, description="取消结果说明")
 
 
-class ReleaseModelResponse(BaseModel):
-    """发布模型响应。"""
+class ReleaseModelData(BaseModel):
+    """发布模型的数据体。"""
 
-    release_name: str = Field(description="发布目录名")
-    release_dir: str = Field(description="发布后的绝对目录路径")
-    source_dir: str = Field(description="模型来源目录路径")
+    model_path: str = Field(description="发布后的模型目录绝对路径")
+
+
+class ReleaseModelResponse(BaseModel):
+    """发布模型统一响应。"""
+
+    code: int = Field(description="业务状态码，0 表示成功")
+    message: str = Field(description="结果描述")
+    data: ReleaseModelData = Field(description="响应数据体")

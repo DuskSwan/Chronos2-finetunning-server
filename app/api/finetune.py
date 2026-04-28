@@ -25,6 +25,7 @@ from app.schemas.response import (
     JobListResponse,
     CancelJobResponse,
     ReleaseModelResponse,
+    ReleaseModelData,
 )
 from app.services.job_service import (
     get_job_detail,
@@ -239,52 +240,76 @@ async def release_finetuned_model(
     db: Session = Depends(get_db),
 ) -> ReleaseModelResponse:
     """发布已训练完成的模型目录。"""
-    job = get_job_by_id(db, request.task_id)
+    if (
+        not request.user_id
+        or not request.user_id.strip()
+        or not request.job_id
+        or not request.job_id.strip()
+        or not request.version
+        or not request.version.strip()
+    ):
+        return ReleaseModelResponse(
+            code=401,
+            message="invalid parameter",
+            data=ReleaseModelData(model_path=""),
+        )
+
+    user_id = request.user_id.strip()
+    job_id = request.job_id.strip()
+    version = request.version.strip()
+
+    job = get_job_by_id(db, job_id)
     if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"任务不存在: {request.task_id}",
+        return ReleaseModelResponse(
+            code=404,
+            message=f"job not found: {job_id}",
+            data=ReleaseModelData(model_path=""),
         )
 
     if job.status != JobStatus.completed.value:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"仅支持发布已完成任务，当前状态: {job.status}",
+        return ReleaseModelResponse(
+            code=409,
+            message=f"job status is not completed: {job.status}",
+            data=ReleaseModelData(model_path=""),
         )
 
     if not job.output_dir:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="模型目录不存在",
+        return ReleaseModelResponse(
+            code=404,
+            message="model directory not found",
+            data=ReleaseModelData(model_path=""),
         )
 
     source_dir = Path(job.output_dir)
     if not source_dir.exists() or not source_dir.is_dir():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"模型目录不存在: {source_dir}",
+        return ReleaseModelResponse(
+            code=404,
+            message=f"model directory not found: {source_dir}",
+            data=ReleaseModelData(model_path=""),
         )
 
-    release_name = f"{request.user_id}_{request.task_id}_{request.version}"
+    release_name = f"{user_id}_{job_id}_{version}"
     settings = get_settings()
     release_root = ensure_dir(settings.release_path_resolved)
     release_dir = release_root / release_name
     if release_dir.exists():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"发布目录已存在: {release_dir}",
+        return ReleaseModelResponse(
+            code=409,
+            message=f"release directory already exists: {release_dir}",
+            data=ReleaseModelData(model_path=""),
         )
 
     try:
         shutil.copytree(src=source_dir, dst=release_dir)
     except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"发布模型失败: {exc}",
-        ) from exc
+        return ReleaseModelResponse(
+            code=500,
+            message=f"release failed: {exc}",
+            data=ReleaseModelData(model_path=""),
+        )
 
     return ReleaseModelResponse(
-        release_name=release_name,
-        release_dir=str(release_dir.resolve()),
-        source_dir=str(source_dir.resolve()),
+        code=0,
+        message="success",
+        data=ReleaseModelData(model_path=str(release_dir.resolve())),
     )
