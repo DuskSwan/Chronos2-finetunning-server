@@ -444,16 +444,16 @@ def test_release_finetuned_model_not_completed(client: TestClient, test_db_sessi
     assert body["code"] == 409
 
 
-def test_release_finetuned_model_conflict_when_target_exists(
+def test_release_finetuned_model_overwrite_when_target_exists(
     client: TestClient,
     test_db_session,
     temp_base_dir,
 ):
-    """Test release conflict when target directory already exists."""
+    """Test release overwrites target directory when it already exists."""
     task_id = "release-job-3"
     model_dir = temp_base_dir / "artifacts" / task_id
     model_dir.mkdir(parents=True, exist_ok=True)
-    (model_dir / "weights.bin").write_text("dummy", encoding="utf-8")
+    (model_dir / "weights.bin").write_text("new-content", encoding="utf-8")
 
     crud.create_job(
         db=test_db_session,
@@ -473,6 +473,7 @@ def test_release_finetuned_model_conflict_when_target_exists(
 
     precreated_release_dir = temp_base_dir / "release" / f"u001_{task_id}_v1"
     precreated_release_dir.mkdir(parents=True, exist_ok=True)
+    (precreated_release_dir / "weights.bin").write_text("old-content", encoding="utf-8")
 
     response = client.post(
         "/v1/finetune/jobs/release",
@@ -480,7 +481,9 @@ def test_release_finetuned_model_conflict_when_target_exists(
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["code"] == 409
+    assert body["code"] == 0
+    assert body["message"] == "success"
+    assert (precreated_release_dir / "weights.bin").read_text(encoding="utf-8") == "new-content"
 
 
 def test_release_finetuned_model_invalid_parameter_returns_401(client: TestClient):

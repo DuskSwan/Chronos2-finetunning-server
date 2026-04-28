@@ -292,14 +292,10 @@ async def release_finetuned_model(
     settings = get_settings()
     release_root = ensure_dir(settings.release_path_resolved)
     release_dir = release_root / release_name
-    if release_dir.exists():
-        return ReleaseModelResponse(
-            code=409,
-            message=f"release directory already exists: {release_dir}",
-            data=ReleaseModelData(model_path=""),
-        )
 
     try:
+        if release_dir.exists():
+            shutil.rmtree(release_dir)
         shutil.copytree(src=source_dir, dst=release_dir)
     except Exception as exc:
         return ReleaseModelResponse(
