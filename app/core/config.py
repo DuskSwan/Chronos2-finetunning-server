@@ -33,6 +33,7 @@ class Settings(BaseSettings):
 
     # 开关
     save_request_artifacts: bool = True # 是否保存请求 JSON 到产物目录 
+    api_bearer_token: str = ""
     
     @property
     def sqlite_db_path_resolved(self) -> Path:

@@ -5,18 +5,53 @@ FastAPI 应用工厂和配置。
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from app.api import health, finetune, tools
+from app.api import health, finetune, tools, train_jobs
 from app.core.config import get_settings
+from app.core.errors import ApiError
 from app.core.paths import ensure_dir
 from app.db.init_db import init_db
 from app.services.queue_service import initialize_queue
+from app.services.train_job_adapter import normalize_api_error
 from app.workers.trainer_worker import initialize_worker
 
 
 from loguru import logger
+
+
+def _is_spec_route(request: Request) -> bool:
+    return request.url.path.startswith("/api/v1/train_jobs")
+
+
+def register_spec_exception_handlers(app: FastAPI) -> None:
+    """为规范兼容路由注册异常处理。"""
+
+    @app.exception_handler(ApiError)
+    async def handle_api_error(request: Request, exc: ApiError) -> JSONResponse:
+        if not _is_spec_route(request):
+            raise exc
+        return JSONResponse(
+            status_code=exc.http_status,
+            content={"code": exc.code, "message": exc.message, "data": {}},
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_request_validation_error(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        if not _is_spec_route(request):
+            return await request_validation_exception_handler(request, exc)
+        err = normalize_api_error(exc)
+        return JSONResponse(
+            status_code=err.http_status,
+            content={"code": err.code, "message": err.message, "data": {}},
+        )
 
 
 def initialize_directories() -> None:
@@ -76,11 +111,14 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    register_spec_exception_handlers(app)
     
     # 包含路由器
     app.include_router(health.router)
     app.include_router(finetune.router)
     app.include_router(tools.router)
+    app.include_router(train_jobs.router)
     
     return app
 
