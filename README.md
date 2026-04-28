@@ -580,13 +580,11 @@ Content-Type: `application/json`
 时间字段: ISO 8601（UTC）  
 认证:
 - 旧接口（`/v1/finetune/*`, `/v1/tools/*`, `/health`）默认无认证
-- 规范兼容接口（`/api/v1/train_jobs*`）支持 Bearer Token（`API_BEARER_TOKEN` 非空时启用）
+- 兼容接口（`/api/v1/train_jobs*`, `/api/model/publish`）使用 Bearer Token（`API_BEARER_TOKEN` 非空时启用）
 
-### 任务状态
+### 旧接口（保持兼容）
 
-`queued` / `running` / `completed` / `failed` / `cancelled`
-
-### GET /health
+#### GET /health
 
 用途: 健康检查  
 响应 200:
@@ -597,7 +595,7 @@ Content-Type: `application/json`
 }
 ```
 
-### POST /v1/finetune/jobs
+#### POST /v1/finetune/jobs
 
 用途: 创建训练任务  
 请求体:
@@ -612,9 +610,7 @@ Content-Type: `application/json`
 | learning_rate | float | 0.0001 | 否 | 学习率（正数） |
 | num_steps | int | 1000 | 否 | 训练总步数（正整数） |
 | batch_size | int | 32 | 否 | 批处理大小（正整数） |
-| selected_groups | list[object] | - | **是** | 相关组列表，每个元素形如 `{"target": "...", "covariates": ["..."]}` |
-
-> 每个 `selected_groups` 元素会独立训练一个模型，结果通过 `model_paths` 返回。
+| selected_groups | list[object] | - | 否 | 分组列表，元素形如 `{"target":"...","covariates":["..."]}` |
 
 响应 201:
 
@@ -625,112 +621,40 @@ Content-Type: `application/json`
 }
 ```
 
-常见错误: 422（参数校验失败）
-
-### GET /v1/finetune/jobs
+#### GET /v1/finetune/jobs
 
 用途: 查询最近任务列表  
-查询参数: `limit` (int, 默认 20)  
-响应 200:
+查询参数: `limit` (int, 默认 20)
 
-```json
-{
-  "items": [
-    {
-      "job_id": "550e8400-e29b-41d4-a716-446655440000",
-      "status": "running",
-      "created_at": "2024-01-01T12:00:00Z",
-      "started_at": "2024-01-01T12:00:10Z",
-      "finished_at": null
-    }
-  ]
-}
-```
+#### GET /v1/finetune/jobs/{job_id}
 
-### GET /v1/finetune/jobs/{job_id}
-
-用途: 查询任务详情、进度和 loss 曲线  
-响应 200:
-
-```json
-{
-  "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "running",
-  "created_at": "2024-01-01T12:00:00Z",
-  "started_at": "2024-01-01T12:00:10Z",
-  "finished_at": null,
-  "progress": {
-    "current_step": 120,
-    "max_steps": 1000,
-    "last_loss": 0.5321
-  },
-  "error_message": null,
-  "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
-  "model_paths": null,
-  "metrics": {
-    "target": [0.98, 0.76, 0.61]
-  }
-}
-```
-
+用途: 查询任务详情、进度和 loss 曲线。  
 `metrics` 字段说明：
-
 - `queued`：`{}`
 - `running` / `failed` / `cancelled`：返回当前可查询到的曲线点
 - `completed`：返回完整曲线
 
-常见错误: 404（任务不存在）
+#### GET /v1/finetune/jobs/{job_id}/logs
 
-### GET /v1/finetune/jobs/{job_id}/logs
+用途: 查询日志（`text/plain`）  
+查询参数: `tail` (int, 可选，仅返回最后 N 行)
 
-用途: 查询日志  
-查询参数: `tail` (int, 可选，仅返回最后 N 行)  
-响应 200（`text/plain`）:
+#### POST /v1/finetune/jobs/{job_id}/cancel
 
-```text
-训练开始: 任务 550e8400-e29b-41d4-a716-446655440000
-[步骤 1], 损失=0.98
-...
-```
+用途: 请求取消任务（协作式取消）
 
-常见错误: 404（任务或日志文件不存在）
+#### POST /v1/finetune/jobs/release
 
-### POST /v1/finetune/jobs/{job_id}/cancel
-
-用途: 请求取消任务（协作式取消）  
-响应 200:
-
-```json
-{
-  "job_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "running",
-  "cancel_requested": true,
-  "message": "已请求取消，等待训练停止"
-}
-```
-
-常见错误: 409（状态不允许取消），404（任务不存在）
-
-
-### POST /v1/finetune/jobs/release
-
-用途: 发布已训练完成的模型目录到 `RELEASE_PATH` 下。  
+用途: 发布已完成任务的模型目录。  
 请求体:
 
 | 字段 | 类型 | 必需 | 说明 |
 | ---- | ---- | ---- | ---- |
-| `user_id` | string | 是 | 用户 ID |
-| `job_id` | string | 是 | 已训练任务 ID |
-| `version` | string | 是 | 版本号 |
+| user_id | string | 是 | 用户 ID |
+| job_id | string | 是 | 已训练任务 ID |
+| version | string | 是 | 版本号 |
 
-发布目录名规则：`<user_id>_<job_id>_<version>`
-
-行为说明：
-- 任务必须存在且状态为 `completed`。
-- 会复制该任务的 `output_dir` 整个目录。
-- 若目标目录已存在，会先删除再复制（覆盖发布）。
-
-响应 200（成功）：
+响应 200（成功）:
 
 ```json
 {
@@ -742,36 +666,94 @@ Content-Type: `application/json`
 }
 ```
 
-响应 200（业务失败示例）：
+说明:
+- 目标发布目录已存在时，会先删除再复制（覆盖发布）。
+- 当前接口返回的是发布目录绝对路径（字段名 `model_path`）。
+
+### 兼容接口（规范对齐）
+
+#### POST /api/v1/train_jobs
+
+用途: 创建训练任务（规范响应包装）。  
+鉴权: Bearer Token（配置启用时）
+
+响应 200:
 
 ```json
 {
-  "code": 401,
-  "message": "invalid parameter",
+  "code": 0,
+  "message": "success",
   "data": {
-    "model_path": ""
+    "job_id": "j_20260424_abc123"
   }
 }
 ```
 
-业务码说明：
-- `0`: success
-- `401`: invalid parameter
-- `404`: job/model directory not found
-- `409`: job status not completed
-- `500`: release failed
+#### GET /api/v1/train_jobs/{job_id}
 
-### 规范兼容接口（新增）
+用途: 查询训练任务状态（规范字段）。  
+鉴权: Bearer Token（配置启用时）
 
-用于对齐外部接口规范，保留旧接口不变。
+响应 200:
 
-- `POST /api/v1/train_jobs`
-- `GET /api/v1/train_jobs/{job_id}`
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "job_id": "j_20260424_abc123",
+    "is_completed": false,
+    "status": "pending",
+    "loss_data": {
+      "steps": [1, 2],
+      "values": [0.9, 0.7],
+      "current_loss": 0.7
+    },
+    "duration": 128
+  }
+}
+```
 
-特性：
-- Bearer Token 鉴权（通过 `API_BEARER_TOKEN` 配置；为空时不校验）。
-- 统一返回结构：`{code, message, data}`。
-- 状态映射：内部 `queued` 对外映射为 `pending`。
+#### POST /api/model/publish
+
+用途: 模型发布兼容接口（返回相对模型路径）。  
+鉴权: Bearer Token（配置启用时）
+
+请求体:
+
+```json
+{
+  "user_id": 10001,
+  "version": "1.0.0",
+  "job_id": "train_job_20260121103000"
+}
+```
+
+成功响应 200:
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "model_path": "models/user_10001/v1.0.0/train_job_20260121103000/model.bin"
+  }
+}
+```
+
+失败示例（版本号格式非法）:
+
+```json
+{
+  "code": 500,
+  "message": "invalid version format, expected x.y.z",
+  "data": null
+}
+```
+
+说明:
+- `model_path` 为相对路径，根目录由 `RELEASE_PATH` 决定。
+- 同一 `user_id + version + job_id` 多次调用，返回路径保持一致（覆盖发布）。
 
 ## 测试
 
