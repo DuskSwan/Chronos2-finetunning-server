@@ -242,7 +242,10 @@ curl -X POST http://127.0.0.1:8011/v1/finetune/jobs \
 | `batch_size` | int | 32 | 批处理大小 |
 | `selected_groups` | list[object] | **必需** | 相关组列表，每个元素形如 `{"target": "...", "covariates": ["..."]}` |
 
-> 每个 `selected_groups` 元素会独立训练一个模型，返回的 `model_paths` 为对应的模型目录列表。
+> 每个 `selected_groups` 元素会独立训练一个模型。任务完成后会返回：
+> - `output_dir`：该任务唯一结果目录
+> - `target_model_map`：`target -> 模型目录` 显式映射
+> - `model_paths`：兼容字段（由 `target_model_map` 派生）
 
 **任务状态说明**：
 
@@ -304,7 +307,9 @@ curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>
   },
   "error_message": null,
   "log_path": "./logs/550e8400-e29b-41d4-a716-446655440000.log",
-  "model_paths": null
+  "model_paths": null,
+  "target_model_map": null,
+  "output_dir": "./artifacts/550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -522,7 +527,7 @@ ts_model_train_and_finetune/
 
 8. **进度更新** (`app/callbacks/progress_callback.py`)
    - 每隔指定步数更新数据库中的current_step和last_loss
-   - 每次拿到 loss 时按组写入 `finetune_job_losses` 曲线点（group_index, step, loss）
+   - 每次拿到 loss 时写入 `finetune_job_losses` 曲线点（target, step, loss）
    - 检查取消请求，如有则抛出异常终止训练
 
 9. **训练完成** (`app/services/trainer_service.py`)
@@ -546,13 +551,15 @@ ts_model_train_and_finetune/
 | output_dir | VARCHAR(512) | 否 | - |
 | log_path | VARCHAR(512) | 否 | - |
 | model_paths | TEXT | 是 | NULL |
+| target_model_map | TEXT | 是 | NULL |
 | error_message | TEXT | 是 | NULL |
 | current_step | INTEGER | 否 | 0 |
 | max_steps | INTEGER | 否 | 0 |
 | last_loss | FLOAT | 是 | NULL |
 | cancel_requested | BOOLEAN | 否 | False |
 
-> `model_paths` 在数据库中以 JSON 字符串保存（列表形式）。
+> `target_model_map` 在数据库中以 JSON 字符串保存（对象形式：`target -> model_path`）。  
+> `model_paths` 为兼容字段，以 JSON 字符串保存列表形式。
 
 `finetune_job_losses` 表存储训练 loss 曲线点，字段如下：
 
@@ -561,13 +568,14 @@ ts_model_train_and_finetune/
 | id | INTEGER | 否 | 自增 |
 | job_id | VARCHAR(36) | 否 | - |
 | group_index | INTEGER | 否 | 0 |
+| target | VARCHAR(255) | 否 | - |
 | step | INTEGER | 否 | - |
 | loss | FLOAT | 否 | - |
 | created_at | DATETIME | 否 | 当前时间 |
 
 约束与索引：
 
-- 唯一约束：`(job_id, group_index, step)`（同组同一步会被更新覆盖，不会重复插入）
+- 唯一约束：`(job_id, target, step)`（同 target 同一步会被更新覆盖，不会重复插入）
 - 外键：`job_id -> finetune_jobs.id`
 - 索引：`job_id`
 
@@ -633,6 +641,11 @@ Content-Type: `application/json`
 - `queued`：`{}`
 - `running` / `failed` / `cancelled`：返回当前可查询到的曲线点
 - `completed`：返回完整曲线
+
+补充说明：
+- `metrics` 结构保持不变：`metrics.<target> = [loss...]`
+- loss 来源改为数据库中显式 `target` 维度记录，不再依赖 `group_index` 回推
+- 详情响应新增 `target_model_map` 与 `output_dir`，旧字段 `model_paths` 继续保留（兼容）
 
 #### GET /v1/finetune/jobs/{job_id}/logs
 
@@ -713,6 +726,10 @@ Content-Type: `application/json`
   }
 }
 ```
+
+说明：
+- 该接口继续遵循《接口文档规范说明》：外层固定 `code/message/data`。
+- `loss_data` 字段结构保持不变（`steps/values/current_loss`），内部仅替换为基于 `target` 的库内聚合结果。
 
 #### POST /api/model/publish
 
