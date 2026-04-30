@@ -23,6 +23,20 @@ def _ensure_model_paths_column() -> None:
         conn.execute(text("ALTER TABLE finetune_jobs ADD COLUMN model_paths TEXT"))
 
 
+def _ensure_target_model_map_column() -> None:
+    """确保 finetune_jobs 表存在 target_model_map 列。"""
+    inspector = inspect(engine)
+    if "finetune_jobs" not in inspector.get_table_names():
+        return
+
+    columns = {col["name"] for col in inspector.get_columns("finetune_jobs")}
+    if "target_model_map" in columns:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE finetune_jobs ADD COLUMN target_model_map TEXT"))
+
+
 def _ensure_finetune_job_losses_table() -> None:
     """确保 finetune_job_losses 表存在。"""
     inspector = inspect(engine)
@@ -31,8 +45,8 @@ def _ensure_finetune_job_losses_table() -> None:
         columns = {
             col["name"] for col in inspector.get_columns("finetune_job_losses")
         }
-        # 旧版本没有 group_index，需要重建表结构（不兼容旧唯一键）
-        if "group_index" not in columns:
+        # 旧版本缺少 target 或 group_index 时重建结构。
+        if "group_index" not in columns or "target" not in columns:
             with engine.begin() as conn:
                 conn.execute(
                     text(
@@ -47,25 +61,50 @@ def _ensure_finetune_job_losses_table() -> None:
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             job_id VARCHAR(36) NOT NULL,
                             group_index INTEGER NOT NULL,
+                            target VARCHAR(255) NOT NULL,
                             step INTEGER NOT NULL,
                             loss FLOAT NOT NULL,
                             created_at DATETIME NOT NULL,
-                            CONSTRAINT uq_job_group_step UNIQUE (job_id, group_index, step),
+                            CONSTRAINT uq_job_target_step UNIQUE (job_id, target, step),
                             FOREIGN KEY(job_id) REFERENCES finetune_jobs(id) ON DELETE CASCADE
                         )
                         """
                     )
                 )
-                conn.execute(
-                    text(
-                        """
-                        INSERT INTO finetune_job_losses
-                        (job_id, group_index, step, loss, created_at)
-                        SELECT job_id, 0, step, loss, created_at
-                        FROM finetune_job_losses_old
-                        """
+                if "group_index" in columns:
+                    conn.execute(
+                        text(
+                            """
+                            INSERT INTO finetune_job_losses
+                            (job_id, group_index, target, step, loss, created_at)
+                            SELECT
+                                job_id,
+                                group_index,
+                                'group_' || CAST(group_index + 1 AS TEXT),
+                                step,
+                                loss,
+                                created_at
+                            FROM finetune_job_losses_old
+                            """
+                        )
                     )
-                )
+                else:
+                    conn.execute(
+                        text(
+                            """
+                            INSERT INTO finetune_job_losses
+                            (job_id, group_index, target, step, loss, created_at)
+                            SELECT
+                                job_id,
+                                0,
+                                'group_1',
+                                step,
+                                loss,
+                                created_at
+                            FROM finetune_job_losses_old
+                            """
+                        )
+                    )
                 conn.execute(text("DROP TABLE finetune_job_losses_old"))
                 conn.execute(
                     text(
@@ -83,10 +122,11 @@ def _ensure_finetune_job_losses_table() -> None:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     job_id VARCHAR(36) NOT NULL,
                     group_index INTEGER NOT NULL,
+                    target VARCHAR(255) NOT NULL,
                     step INTEGER NOT NULL,
                     loss FLOAT NOT NULL,
                     created_at DATETIME NOT NULL,
-                    CONSTRAINT uq_job_group_step UNIQUE (job_id, group_index, step),
+                    CONSTRAINT uq_job_target_step UNIQUE (job_id, target, step),
                     FOREIGN KEY(job_id) REFERENCES finetune_jobs(id) ON DELETE CASCADE
                 )
                 """
@@ -104,6 +144,7 @@ def init_db() -> None:
     """初始化数据库表。"""
     Base.metadata.create_all(bind=engine)
     _ensure_model_paths_column()
+    _ensure_target_model_map_column()
     _ensure_finetune_job_losses_table()
 
 

@@ -176,10 +176,15 @@ def _serialize_model_paths(model_paths: list[str]) -> str:
     return json.dumps(model_paths, ensure_ascii=False)
 
 
+def _serialize_target_model_map(target_model_map: dict[str, str]) -> str:
+    return json.dumps(target_model_map, ensure_ascii=False)
+
+
 def mark_job_completed(
     db: Session,
     job_id: str,
-    model_paths: list[str],
+    target_model_map: Optional[dict[str, str]] = None,
+    model_paths: Optional[list[str]] = None,
     finished_at: Optional[datetime] = None,
 ) -> Optional[FinetuneJob]:
     """
@@ -188,7 +193,8 @@ def mark_job_completed(
     参数：
         db: 数据库会话
         job_id: 任务 ID
-        model_paths: 微调模型路径列表
+        target_model_map: target 到模型目录的映射
+        model_paths: 兼容字段，旧版模型路径列表
         finished_at: 完成时间
     
     返回：
@@ -198,7 +204,18 @@ def mark_job_completed(
     if not job:
         return None
     
+    if target_model_map is None:
+        target_model_map = {}
+    if model_paths is None:
+        model_paths = list(target_model_map.values())
+    if not target_model_map and model_paths:
+        target_model_map = {
+            f"group_{idx + 1}": str(path)
+            for idx, path in enumerate(model_paths)
+        }
+
     job.status = JobStatus.completed.value
+    job.target_model_map = _serialize_target_model_map(target_model_map)
     job.model_paths = _serialize_model_paths(model_paths)
     job.finished_at = finished_at or datetime.now(timezone.utc)
     
@@ -296,13 +313,15 @@ def upsert_job_loss_point(
     group_index: int,
     step: int,
     loss: float,
+    target: Optional[str] = None,
 ) -> FinetuneJobLoss:
     """插入或更新任务的 loss 曲线点。"""
+    normalized_target = (target or "").strip() or f"group_{group_index + 1}"
     point = (
         db.query(FinetuneJobLoss)
         .filter(
             FinetuneJobLoss.job_id == job_id,
-            FinetuneJobLoss.group_index == group_index,
+            FinetuneJobLoss.target == normalized_target,
             FinetuneJobLoss.step == step,
         )
         .first()
@@ -312,12 +331,15 @@ def upsert_job_loss_point(
         point = FinetuneJobLoss(
             job_id=job_id,
             group_index=group_index,
+            target=normalized_target,
             step=step,
             loss=loss,
             created_at=datetime.now(timezone.utc),
         )
         db.add(point)
     else:
+        point.group_index = group_index
+        point.target = normalized_target
         point.loss = loss
 
     db.commit()
@@ -333,6 +355,6 @@ def list_job_loss_points(
     return (
         db.query(FinetuneJobLoss)
         .filter(FinetuneJobLoss.job_id == job_id)
-        .order_by(FinetuneJobLoss.group_index.asc(), FinetuneJobLoss.step.asc())
+        .order_by(FinetuneJobLoss.target.asc(), FinetuneJobLoss.step.asc())
         .all()
     )

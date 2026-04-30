@@ -104,6 +104,7 @@ class ProgressCallback:
                     db=self.db_session,
                     job_id=self.job_id,
                     group_index=self.active_group_index,
+                    target=self.active_group_target or f"group_{self.active_group_index + 1}",
                     step=group_step,
                     loss=loss,
                 )

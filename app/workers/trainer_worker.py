@@ -101,6 +101,11 @@ class TrainerWorker:
                 mark_job_cancelled(db, job_id)
                 logger.info(f"任务已请求取消（queued），已标记为 cancelled: {job_id}")
                 return
+            # running 状态下若已请求取消，避免继续进入训练
+            if job.cancel_requested and job.status == JobStatus.running.value:
+                mark_job_cancelled(db, job_id)
+                logger.info(f"任务已请求取消（running），已标记为 cancelled: {job_id}")
+                return
             
             # 2. 更新为运行状态
             start_job_training(db, job_id)
@@ -131,7 +136,7 @@ class TrainerWorker:
 
             # 5. 执行真实训练
             logger.info(f"开始真实训练任务: {job_id}")
-            model_paths = train_chronos2(**train_config)
+            target_model_map = train_chronos2(**train_config)
 
             # 6. 标记为完成（若未取消）
             db.expire_all()
@@ -141,8 +146,8 @@ class TrainerWorker:
                 logger.info(f"任务 {job_id} 在完成前被取消")
                 return
             
-            complete_job_training(db, job_id, model_paths)
-            logger.info(f"任务 {job_id} 已完成，模型路径列表: {model_paths}")
+            complete_job_training(db, job_id, target_model_map)
+            logger.info(f"任务 {job_id} 已完成，目标模型映射: {target_model_map}")
             
         except CancelledError as e:
             logger.info(f"任务 {job_id} 被取消: {e}")

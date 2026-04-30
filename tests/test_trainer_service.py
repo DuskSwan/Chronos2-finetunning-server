@@ -177,9 +177,9 @@ class TestTrainerService:
         )
 
         # 验证模型路径与日志
-        assert isinstance(result, list)
-        assert len(result) == 1
-        model_path = Path(result[0])
+        assert isinstance(result, dict)
+        assert "target" in result
+        model_path = Path(result["target"])
         assert model_path.exists()
         assert model_path.is_dir()
         assert Path(log_path).exists()

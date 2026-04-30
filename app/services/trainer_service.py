@@ -49,7 +49,7 @@ def train_chronos2(
     finetuned_ckpt_name: str = "finetuned-ckpt",
     device: str = "cpu",
     **kwargs: Any
-) -> list[str]:
+) -> dict[str, str]:
     """使用 Chronos-2 微调训练模型。
 
     此函数加载数据、准备训练环境、调用官方 Chronos-2 fit()、
@@ -75,7 +75,7 @@ def train_chronos2(
         **kwargs: 其他参数。
 
     Returns:
-        已保存模型的路径列表。
+        target 到已保存模型路径的映射。
 
     Raises:
         FileNotFoundError: 如果数据文件不存在。
@@ -169,7 +169,7 @@ def train_chronos2(
         )
         callback.check_cancel_requested()
 
-        model_paths = []
+        target_model_map: dict[str, str] = {}
         for i, input_dict in enumerate(train_inputs):
             tar_col = selected_groups[i]["target"]
             callback.on_group_start(
@@ -213,10 +213,10 @@ def train_chronos2(
 
             # 7. 记录训练完成
             callback.on_group_end(model_path=str(model_save_path))
-            model_paths.append( str(model_save_path) )
+            target_model_map[tar_col] = str(model_save_path)
 
         callback.on_training_end()
-        return model_paths
+        return target_model_map
 
     except CancelledError as e:
         logger.info(f"训练被取消: {e}")

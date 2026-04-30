@@ -36,6 +36,7 @@ class FinetuneJob(Base):
     output_dir: Mapped[str] = mapped_column(String(512), nullable=False)
     log_path: Mapped[str] = mapped_column(String(512), nullable=False)
     model_paths: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    target_model_map: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_steps: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -51,7 +52,7 @@ class FinetuneJobLoss(Base):
 
     __tablename__ = "finetune_job_losses"
     __table_args__ = (
-        UniqueConstraint("job_id", "group_index", "step", name="uq_job_group_step"),
+        UniqueConstraint("job_id", "target", "step", name="uq_job_target_step"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -62,6 +63,7 @@ class FinetuneJobLoss(Base):
         index=True,
     )
     group_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    target: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     step: Mapped[int] = mapped_column(Integer, nullable=False)
     loss: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

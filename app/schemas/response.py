@@ -48,6 +48,8 @@ class JobDetailResponse(BaseModel):
     error_message: Optional[str] = Field(default=None, description="错误信息")
     log_path: Optional[str] = Field(default=None, description="日志文件路径")
     model_paths: Optional[list[str]] = Field(default=None, description="模型输出路径列表")
+    target_model_map: Optional[dict[str, str]] = Field(default=None, description="target 到模型路径映射")
+    output_dir: Optional[str] = Field(default=None, description="任务输出目录")
     metrics: dict[str, Any] = Field(default_factory=dict, description="loss 曲线数据")
 
 

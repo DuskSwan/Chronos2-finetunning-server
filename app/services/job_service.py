@@ -44,8 +44,17 @@ def _deserialize_model_paths(value: Optional[str]) -> Optional[list[str]]:
     return None
 
 
+def _deserialize_target_model_map(value: Optional[str]) -> Optional[dict[str, str]]:
+    if value is None or not str(value).strip():
+        return None
+    parsed = json.loads(value)
+    if isinstance(parsed, dict):
+        return {str(k): str(v) for k, v in parsed.items()}
+    return None
+
+
 def _extract_group_targets(request_json: Optional[str]) -> list[str]:
-    """从请求 JSON 中提取 selected_groups 的 target 名称。"""
+    """兼容逻辑：从请求 JSON 中提取 selected_groups 的 target 名称。"""
     if not request_json:
         return []
     try:
@@ -73,21 +82,41 @@ def _build_loss_metrics(db: Any, job_id: str, request_json: Optional[str]) -> di
     if not loss_points:
         return {}
 
-    grouped: dict[int, list[Any]] = defaultdict(list)
-    for point in loss_points:
-        grouped[int(point.group_index)].append(point)
-
+    grouped: dict[str, list[Any]] = defaultdict(list)
     target_names = _extract_group_targets(request_json)
+    for point in loss_points:
+        target = str(getattr(point, "target", "") or "").strip()
+        group_index = int(getattr(point, "group_index", 0))
+        # 历史数据兜底：target 为空或仍是 group_n 时，优先还原为请求中的真实 target
+        if (not target) or target.startswith("group_"):
+            target = (
+                target_names[group_index]
+                if group_index < len(target_names)
+                else f"group_{group_index + 1}"
+            )
+        grouped[target].append(point)
+
     metrics: dict[str, list[float]] = {}
-    for group_index in sorted(grouped.keys()):
-        target = (
-            target_names[group_index]
-            if group_index < len(target_names)
-            else f"group_{group_index + 1}"
-        )
-        metrics[target] = [float(point.loss) for point in grouped[group_index]]
+    for target in sorted(grouped.keys()):
+        metrics[target] = [float(point.loss) for point in grouped[target]]
 
     return metrics
+
+
+def _build_target_model_map_fallback(
+    request_json: Optional[str],
+    model_paths: Optional[list[str]],
+) -> Optional[dict[str, str]]:
+    if not model_paths:
+        return None
+    targets = _extract_group_targets(request_json)
+    if not targets:
+        return {f"group_{idx + 1}": str(path) for idx, path in enumerate(model_paths)}
+    mapping: dict[str, str] = {}
+    for idx, path in enumerate(model_paths):
+        key = targets[idx] if idx < len(targets) else f"group_{idx + 1}"
+        mapping[key] = str(path)
+    return mapping
 
 
 def create_finetune_job(
@@ -183,19 +212,24 @@ def update_job_step(
 def complete_job_training(
     db: Any,
     job_id: str,
-    model_paths: list[str],
+    target_model_map: dict[str, str] | list[str],
 ) -> None:
     """标记任务为完成状态。
 
     Args:
         db: 数据库会话。
         job_id: 任务 ID。
-        model_paths: 微调模型路径列表。
+        target_model_map: 微调模型路径映射（兼容旧列表）。
     """
+    if isinstance(target_model_map, list):
+        target_model_map = {
+            f"group_{idx + 1}": str(path)
+            for idx, path in enumerate(target_model_map)
+        }
     mark_job_completed(
         db=db,
         job_id=job_id,
-        model_paths=model_paths,
+        target_model_map=target_model_map,
         finished_at=datetime.now(timezone.utc),
     )
 
@@ -243,7 +277,12 @@ def get_job_detail(db: Any, job_id: str) -> JobDetailResponse:
         last_loss=job.last_loss,
     )
 
+    target_model_map = _deserialize_target_model_map(job.target_model_map)
     model_paths = _deserialize_model_paths(job.model_paths)
+    if model_paths is None and target_model_map:
+        model_paths = list(target_model_map.values())
+    if target_model_map is None:
+        target_model_map = _build_target_model_map_fallback(job.request_json, model_paths)
 
     return JobDetailResponse(
         job_id=job.id,
@@ -255,6 +294,8 @@ def get_job_detail(db: Any, job_id: str) -> JobDetailResponse:
         error_message=job.error_message,
         log_path=job.log_path,
         model_paths=model_paths,
+        target_model_map=target_model_map,
+        output_dir=job.output_dir,
         metrics=_build_loss_metrics(db, job_id, job.request_json),
     )
 
