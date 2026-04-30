@@ -1,105 +1,148 @@
-# 训练任务 target-model 显式关联改造 TODO
+# 训练任务 target-model 显式关联改造 TODO（实施版）
 
-## 结论（先看）
+## 0. 约束与边界
 
-你的 3 点要求能够保证后续按 `target` 正确使用模型，方向是可行的。
+1. 接口兼容约束
+- 旧接口路径、请求参数、响应主结构不变。
+- `/api/*` 兼容接口必须继续遵循《接口文档规范说明.md》：
+  - 外层结构保持 `code/message/data`
+  - 字段命名保持 `snake_case`
+  - 既有业务字段语义不变
 
-但要完全落地，需要补充一个关键点：
-- `loss` 记录也要在库里显式带 `target`（或单独 target 维度表），否则查询仍依赖 `group_index -> request_json.selected_groups` 的隐式映射。
+2. 变更承载方式
+- 涉及接口返回信息扩展时，只能通过“新增变量/新增字段”承载，不改旧字段语义。
+- 旧字段不删除、不重命名、不改类型（至少在兼容期内）。
 
----
+3. 发布与产物约束
+- 单个任务的训练结果仍以 `job.output_dir` 为唯一结果目录。
+- 发布接口复制单位是“任务目录”，不是“模型路径列表”。
 
-## 目标状态
+## 1. 数据模型改造
 
-1. 单任务产物仍是一个目录（`job.output_dir`），目录内可包含多个子模型目录。  
-2. 数据库存储 `target -> model_path` 显式映射（而非仅 `model_paths` 列表）。  
-3. 查询 loss 直接按数据库中 `target` 聚合返回，不再通过 `group_index` 回推。  
-4. 训练完成返回任务结果目录（单目录），发布接口复制该目录（单目录复制）。  
+1. `finetune_jobs` 新增字段
+- 新增 `target_model_map`（TEXT，可空，JSON 字符串）。
+- 结构：`{"<target>": "<abs_model_dir_path>", ...}`。
+- 保留原 `model_paths` 字段用于兼容读取。
 
----
+2. `finetune_job_losses` 新增字段
+- 新增 `target`（STRING/TEXT，非空）。
+- 唯一约束调整为 `(job_id, target, step)`。
+- `group_index` 保留兼容（迁移期可继续写入，不作为查询主键维度）。
 
-## 必改项（代码）
+3. 初始化与迁移脚本
+- 在 `app/db/init_db.py` 增加列探测与补列逻辑：
+  - `finetune_jobs.target_model_map`
+  - `finetune_job_losses.target`
+- 处理唯一约束变更（必要时重建 `finetune_job_losses` 表）。
 
-1. 数据库模型：任务模型增加/替换字段
-- 在 `finetune_jobs` 增加 `target_model_map`（TEXT，JSON 字符串）：
-  - 结构建议：`{"target_a": "/abs/.../finetuned-ckpt_target_a", "target_b": "..."}`
-- 保留 `model_paths` 作为兼容字段（短期），新逻辑不再依赖它。
+## 2. 训练链路改造
 
-2. 数据库模型：loss 表增加 target 维度
-- 在 `finetune_job_losses` 增加 `target`（STRING/TEXT, NOT NULL）。
-- 唯一键改为 `(job_id, target, step)`。
-- `group_index` 可保留兼容（短期可写入但不参与查询核心逻辑）。
+1. 训练结果返回结构
+- `app/services/trainer_service.py::train_chronos2()` 返回值从 `list[str]` 改为 `dict[str, str]`（`target -> model_path`）。
+- 仍按当前目录规则保存子模型：`<output_dir>/<finetuned_ckpt_name>_<target>/...`。
 
-3. 训练服务返回结构改造
-- `train_chronos2()` 返回从 `list[str]` 改为 `dict[str, str]`（`target -> model_path`）。
-- `trainer_worker` / `job_service.complete_job_training` / `crud.mark_job_completed` 全链路改为存映射。
+2. worker 与任务完成入库
+- `app/workers/trainer_worker.py` 接收新的映射返回值。
+- `app/services/job_service.py::complete_job_training()` 改为接收并写入 `target_model_map`。
+- `app/db/crud.py::mark_job_completed()` 增加 `target_model_map` 持久化。
+- 兼容写入：可由 `target_model_map.values()` 派生旧 `model_paths`（仅兼容用途）。
 
-4. 训练回调写 loss 改造
-- `upsert_job_loss_point()` 入参增加 `target`，写入 `finetune_job_losses.target`。
-- 回调层在每次写 loss 时使用当前组 `target`（已有 `active_group_target`，可直接复用）。
+3. 训练过程 loss 入库
+- `app/db/crud.py::upsert_job_loss_point()` 入参新增 `target`。
+- 回调中每次写 loss 时传入当前 `active_group_target`。
+- 数据库存储层不再依赖 `group_index -> target` 推断。
 
-5. 查询接口改造
-- `job_service._build_loss_metrics()` 改为：
-  - 直接从 `finetune_job_losses` 按 `target, step` 查询并组装 `metrics[target] = [loss...]`。
-  - 移除对 `request_json` 与 `_extract_group_targets` 的依赖。
- - 对外响应格式保持不变：
-   - `/v1/finetune/jobs/{job_id}` 仍返回现有 `metrics` 结构（`dict[str, list[float]]`）。
-   - `/api/v1/train_jobs/{job_id}` 仍返回现有 `loss_data` 结构（`steps/values/current_loss`）。
-   - 仅替换内部数据来源与转换逻辑，不新增/删除接口字段。
+## 3. 查询与响应适配（接口格式不变）
 
-6. 任务详情返回字段调整
-- `JobDetailResponse` 建议新增：
-  - `output_dir: str`
-  - `target_model_map: dict[str, str] | null`
-- `model_paths` 标记为兼容字段（可选保留一段时间）。
+1. 内部查询逻辑改造
+- `app/services/job_service.py::_build_loss_metrics()` 改为直接按数据库 `target, step` 聚合。
+- 删除对 `request_json.selected_groups` 的 target 回推依赖。
 
-7. 发布逻辑确认（两条接口）
-- `/v1/finetune/jobs/release`：继续复制 `job.output_dir`（单目录），返回发布目录。
-- `/api/model/publish`：继续复制 `job.output_dir` 到目标发布目录；当前响应 `model_path` 命名为文件路径语义（`.../model.bin`），建议评估是否改为目录语义或补充说明。
+2. `/v1/finetune/jobs/{job_id}` 保持兼容
+- 保持现有响应字段不删：
+  - `model_paths` 继续返回（兼容）
+  - `metrics` 结构保持 `dict[str, list[float]]`
+- 可新增字段（新增变量方式）：
+  - `target_model_map`（推荐新增）
+  - `output_dir`（如当前未返回可新增）
 
----
+3. `/api/v1/train_jobs/{job_id}` 保持规范
+- 外层 `code/message/data` 不变。
+- `loss_data` 结构保持 `steps/values/current_loss` 不变。
+- 若当前实现是单曲线输出，保持该行为；新增内部规则变量用于确定默认 target：
+  - 示例变量：`default_loss_target_strategy`（如 `first_selected_target`）
+  - 仅影响内部选择逻辑，不改变响应格式。
 
-## 迁移与兼容（必须有）
+## 4. 发布链路确认
 
-1. 初始化迁移脚本（`init_db`）
-- 增加 `target_model_map` 列检测与补列。
-- `finetune_job_losses` 表结构迁移（加 `target` 与新唯一键）。
+1. `/v1/finetune/jobs/release`
+- 继续复制 `job.output_dir` 到发布目录。
+- 返回值结构不变（旧字段保持）。
 
-2. 旧数据回填策略
-- `target_model_map` 回填：
-  - 优先从 `request_json.selected_groups` + `model_paths` 按旧顺序 zip 回填（仅历史兼容）。
-- `loss.target` 回填：
-  - 同理用历史 `group_index` 与 `selected_groups` 对应回填。
-- 回填失败（历史脏数据）时记录告警并降级为 `group_{n}`。
+2. `/api/model/publish`
+- 继续复制 `job.output_dir` 到规范发布目录。
+- 返回结构继续保持 `code/message/data.model_path`。
+- 如需补充目录语义，仅通过新增变量/文档说明，不改 `model_path` 字段。
 
-3. 对外兼容策略
-- 过渡期仍返回 `model_paths`（由 `target_model_map.values()` 派生）避免前端立即改动。
-- 文档标注 `model_paths` 将废弃，推荐使用 `target_model_map + output_dir`。
-- loss 兼容策略（接口格式不变）：
-  - 旧逻辑：`group_index -> target` 映射后再拼响应。
-  - 新逻辑：直接按库中 `target` 聚合，再映射到原有响应结构。
-  - 若 `/api/v1/train_jobs/{job_id}` 当前只返回单条曲线，保持该行为不变；目标选择规则写死为“第一个 target（按 selected_groups 顺序）”或“指定默认 target”，并在文档中明确。
+## 5. 旧数据兼容与回填
 
----
+1. `target_model_map` 回填
+- 从历史 `request_json.selected_groups` 与 `model_paths` 按顺序 zip 生成。
+- 回填失败时降级 target 名为 `group_<n>` 并记录日志。
 
-## 文档与测试
+2. `finetune_job_losses.target` 回填
+- 从历史 `group_index` 对应 `selected_groups[target]` 回填。
+- 回填失败时降级 `group_<n>` 并记录日志。
 
-1. README/API 文档更新
-- 任务详情响应示例改为以 `target_model_map` 为主。
-- 明确“训练结果与发布单位是任务目录，不是模型路径列表”。
-- 明确 loss 来源为库内 `target` 维度数据。
+3. 读取兼容顺序
+- 优先读新字段：`target_model_map` / `loss.target`。
+- 新字段缺失时，按旧字段兜底并在日志中告警。
 
-2. 测试用例新增/修改
-- 创建多 target 任务后，断言库内存在正确 `target_model_map`。
-- 断言 `/jobs/{id}` 的 `metrics` 不依赖 `request_json` 也可返回正确结果。
-- 断言发布接口复制的是单目录且目录内含多个 target 子模型。
-- 迁移测试：旧库升级后可查询历史任务。
+## 6. 文档更新
 
----
+1. 更新 `README.md`
+- 明确“任务结果是目录级单位”。
+- 明确“数据库显式存储 `target -> model_path`”。
+- 明确“loss 按 `target` 入库，接口格式不变”。
 
-## 验收标准（Done Definition）
+2. 更新接口说明（含规范对齐）
+- 标注兼容字段与新增字段关系：
+  - `model_paths`（兼容）
+  - `target_model_map`（新增）
+- `/api/*` 文档继续严格遵循《接口文档规范说明.md》。
 
-- 多 target 任务训练完成后，数据库可直接读到 `target -> model_path`。
-- 任意一个 target 的 loss 曲线查询不依赖 `group_index` 推断。
-- 两个发布接口都以“任务目录”为复制单位，且返回的是发布目录信息。
-- 旧数据可读，旧接口不崩溃，兼容期行为可预期。
+## 7. 测试计划
+
+1. 单元测试
+- `crud`：`target_model_map` 序列化/反序列化、`loss.target` upsert 唯一键。
+- `job_service`：不依赖 `request_json` 仍可构建 `metrics`。
+
+2. 集成测试
+- 多 target 任务完成后：
+  - `target_model_map` 正确
+  - `metrics` 按 target 返回正确曲线
+  - `model_paths` 兼容字段仍可用
+- 两个发布接口均复制单目录并成功返回。
+
+3. 迁移测试
+- 旧库升级后可查询旧任务、可发布旧任务、接口不报错。
+- `/api/v1/train_jobs*` 响应结构完全匹配规范。
+
+## 8. 交付验收清单
+
+1. 数据层
+- 可直接查询到 `target_model_map` 与 `loss.target`。
+
+2. 服务层
+- 训练完成入库不再依赖隐式 `group_index -> target` 映射。
+
+3. 接口层
+- 旧接口字段与语义保持不变。
+- 新信息仅通过新增变量/新增字段提供。
+- `/api/*` 响应保持 `code/message/data` 且字段命名规范不变。
+
+4. 发布层
+- 发布复制单位为任务目录，非模型列表。
+
+5. 兼容性
+- 历史数据可读可查可发布，行为可预期。
