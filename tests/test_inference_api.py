@@ -77,42 +77,93 @@ def _auth_header() -> dict[str, str]:
     return {"Authorization": "Bearer spec-token"}
 
 
-def test_infer_model_contract_not_implemented(client: TestClient, temp_base_dir: Path):
-    csv_path = temp_base_dir / "infer.csv"
-    csv_path.write_text("a,b\n1,2\n", encoding="utf-8")
-    model_path = (temp_base_dir / "release" / "mock_model").resolve()
-    model_path.mkdir(parents=True, exist_ok=True)
+class _FakeTensor:
+    def __init__(self, values):
+        self._values = values
 
-    response = client.post(
-        "/api/model/infer",
-        headers=_auth_header(),
-        json={
-            "model_path": str(model_path),
-            "cov_group": [{"target": "a", "covariates": ["b"]}],
-            "prediction_length": 16,
-            "csv_path": str(csv_path),
-        },
-    )
+    def detach(self):
+        return self
+
+    def cpu(self):
+        return self
+
+    def numpy(self):
+        import numpy as np
+        return np.asarray(self._values, dtype=float)
+
+
+class _FakePipeline:
+    def __init__(self, values):
+        self._values = values
+
+    def predict(self, inputs, prediction_length):
+        _ = inputs
+        _ = prediction_length
+        return [_FakeTensor(self._values)]
+
+
+def test_infer_model_success_multi_target(client: TestClient):
+    repo_root = Path(__file__).resolve().parents[1]
+    csv_path = repo_root / "mock_train_data.csv"
+    assert csv_path.exists()
+
+    model_root = repo_root / "release" / "models" / "user_10001" / "v1.0.0" / "job_x"
+    model_a = model_root / "finetuned-ckpt_value1"
+    model_b = model_root / "finetuned-ckpt_value2"
+    model_a.mkdir(parents=True, exist_ok=True)
+    model_b.mkdir(parents=True, exist_ok=True)
+
+    def fake_loader(path, device="cpu"):
+        _ = device
+        p = Path(path)
+        if p.name.endswith("value1"):
+            return _FakePipeline([1.0, 2.0, 3.0])
+        return _FakePipeline([4.0, 5.0, 6.0])
+
+    with patch("app.services.inference_service.load_local_model", side_effect=fake_loader):
+        response = client.post(
+            "/api/model/infer",
+            headers=_auth_header(),
+            json={
+                "model_path": str(model_root.resolve()),
+                "cov_group": [
+                    {"target": "value1", "covariates": ["value2", "value3"]},
+                    {"target": "value2", "covariates": ["value1", "value4"]},
+                ],
+                "prediction_length": 3,
+                "csv_path": str(csv_path.resolve()),
+            },
+        )
+
     assert response.status_code == 200
     body = response.json()
-    assert body["code"] == 501
-    assert body["message"] == "inference service not implemented yet"
-    assert body["data"] is None
+    assert body["code"] == 0
+    assert body["message"] == "success"
+    assert body["data"]["predictions"] == [
+        {"target": "value1", "prediction": [1.0, 2.0, 3.0]},
+        {"target": "value2", "prediction": [4.0, 5.0, 6.0]},
+    ]
 
 
-def test_infer_model_invalid_request_shape(client: TestClient, temp_base_dir: Path):
+def test_infer_model_missing_target_model(client: TestClient):
+    repo_root = Path(__file__).resolve().parents[1]
+    csv_path = repo_root / "mock_train_data.csv"
+    model_root = repo_root / "release" / "models" / "user_10001" / "v1.0.0" / "job_y"
+    model_root.mkdir(parents=True, exist_ok=True)
+    (model_root / "finetuned-ckpt_value2").mkdir(parents=True, exist_ok=True)
+
     response = client.post(
         "/api/model/infer",
         headers=_auth_header(),
         json={
-            "model_path": str((temp_base_dir / "release" / "mock_model").resolve()),
-            "cov_group": [],
-            "prediction_length": 16,
-            "csv_path": str((temp_base_dir / "infer.csv").resolve()),
+            "model_path": str(model_root.resolve()),
+            "cov_group": [{"target": "value1", "covariates": ["value2"]}],
+            "prediction_length": 3,
+            "csv_path": str(csv_path.resolve()),
         },
     )
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 500
-    assert "cov_group cannot be empty" in body["message"]
+    assert body["message"] == "model for target 'value1' not found"
     assert body["data"] is None
