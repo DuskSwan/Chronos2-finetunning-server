@@ -209,3 +209,68 @@ class ModelPublishRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("job_id is required")
         return v.strip()
+
+
+class InferCovGroup(BaseModel):
+    """推理 cov_group 分组。"""
+
+    target: str = Field(description="目标列名")
+    covariates: list[str] = Field(default_factory=list, description="协变量列名列表")
+
+    @field_validator("target")
+    @classmethod
+    def validate_target(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("cov_group.target is required")
+        return v.strip()
+
+    @field_validator("covariates")
+    @classmethod
+    def validate_covariates(cls, v: list[str]) -> list[str]:
+        if any((not item) or (not item.strip()) for item in v):
+            raise ValueError("cov_group.covariates cannot contain empty values")
+        unique = list(dict.fromkeys(v))
+        if len(unique) != len(v):
+            raise ValueError("cov_group.covariates cannot contain duplicates")
+        return [item.strip() for item in v]
+
+    @model_validator(mode="after")
+    def validate_group(self) -> "InferCovGroup":
+        if self.target in self.covariates:
+            raise ValueError("cov_group.target cannot appear in covariates")
+        return self
+
+
+class ModelInferRequest(BaseModel):
+    """模型推理接口请求。"""
+
+    model_path: str = Field(description="发布后的模型绝对路径")
+    cov_group: list[InferCovGroup] = Field(
+        description="预测分组列表，每组包含 target 与 covariates",
+    )
+    prediction_length: int = Field(description="预测步数")
+    csv_path: str = Field(description="推理数据 CSV 文件路径")
+
+    @field_validator("model_path", "csv_path")
+    @classmethod
+    def validate_required_path(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("path is required")
+        return v.strip()
+
+    @field_validator("prediction_length")
+    @classmethod
+    def validate_prediction_length(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("prediction_length must be a positive integer")
+        return v
+
+    @field_validator("cov_group")
+    @classmethod
+    def validate_cov_group(cls, v: list[InferCovGroup]) -> list[InferCovGroup]:
+        if not v:
+            raise ValueError("cov_group cannot be empty")
+        targets = [item.target for item in v]
+        if len(set(targets)) != len(targets):
+            raise ValueError("cov_group.target cannot contain duplicates")
+        return v

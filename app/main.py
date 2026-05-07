@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import health, finetune, tools, train_jobs, model_publish
+from app.api import health, finetune, tools, train_jobs, model_publish, inference
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.paths import ensure_dir
@@ -29,6 +29,9 @@ def _is_spec_route(request: Request) -> bool:
 
 def _is_model_publish_route(request: Request) -> bool:
     return request.url.path == "/api/model/publish"
+
+def _is_model_infer_route(request: Request) -> bool:
+    return request.url.path == "/api/model/infer"
 
 
 def register_spec_exception_handlers(app: FastAPI) -> None:
@@ -48,7 +51,7 @@ def register_spec_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        if _is_model_publish_route(request):
+        if _is_model_publish_route(request) or _is_model_infer_route(request):
             first = exc.errors()[0] if exc.errors() else {}
             msg = first.get("msg", "invalid parameter")
             return JSONResponse(
@@ -130,6 +133,7 @@ def create_app() -> FastAPI:
     app.include_router(tools.router)
     app.include_router(train_jobs.router)
     app.include_router(model_publish.router)
+    app.include_router(inference.router)
     
     return app
 

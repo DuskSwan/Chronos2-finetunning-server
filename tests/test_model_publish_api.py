@@ -111,7 +111,11 @@ def test_publish_model_success(client: TestClient, test_db_session, temp_base_di
     body = response.json()
     assert body["code"] == 0
     assert body["message"] == "success"
-    assert body["data"]["model_path"] == "models/user_10001/v1.0.0/train_job_20260121103000/model.bin"
+    expected_dir = (
+        temp_base_dir / "release" / "models" / "user_10001" / "v1.0.0" / "train_job_20260121103000"
+    ).resolve()
+    assert body["data"]["model_path"] == str(expected_dir)
+    assert (expected_dir / "model.bin").exists()
 
 
 def test_publish_model_invalid_version_format(client: TestClient):

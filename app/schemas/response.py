@@ -92,7 +92,7 @@ class ReleaseModelResponse(BaseModel):
 class ModelPublishData(BaseModel):
     """模型发布接口 data。"""
 
-    model_path: str = Field(description="模型文件相对路径")
+    model_path: str = Field(description="发布后的模型目录绝对路径")
 
 
 class ModelPublishResponse(BaseModel):
@@ -101,3 +101,24 @@ class ModelPublishResponse(BaseModel):
     code: int = Field(description="业务状态码")
     message: str = Field(description="结果描述")
     data: ModelPublishData | None = Field(description="响应数据")
+
+
+class InferPredictionItem(BaseModel):
+    """单个 target 的预测结果。"""
+
+    target: str = Field(description="目标列名")
+    prediction: list[float] = Field(description="预测值列表")
+
+
+class ModelInferData(BaseModel):
+    """模型推理接口 data。"""
+
+    predictions: list[InferPredictionItem] = Field(description="按 cov_group 顺序返回的预测结果")
+
+
+class ModelInferResponse(BaseModel):
+    """模型推理接口响应。"""
+
+    code: int = Field(description="业务状态码")
+    message: str = Field(description="结果描述")
+    data: ModelInferData | None = Field(description="响应数据")

@@ -18,8 +18,8 @@ from app.schemas.response import ModelPublishData, ModelPublishResponse
 router = APIRouter(prefix="/api/model", tags=["model_publish"])
 
 
-def _build_relative_model_path(user_id: int, version: str, job_id: str) -> str:
-    return f"models/user_{user_id}/v{version}/{job_id}/model.bin"
+def _build_publish_subdir(user_id: int, version: str, job_id: str) -> Path:
+    return Path(f"models/user_{user_id}/v{version}/{job_id}")
 
 
 @router.post("/publish", response_model=ModelPublishResponse)
@@ -28,7 +28,7 @@ async def publish_model(
     db: Session = Depends(get_db),
     _auth: None = Depends(require_bearer_token),
 ) -> ModelPublishResponse:
-    """发布模型，返回模型文件相对路径。"""
+    """发布模型，返回发布目录绝对路径。"""
     settings = get_settings()
 
     job = get_job_by_id(db, request.job_id)
@@ -46,13 +46,12 @@ async def publish_model(
         return ModelPublishResponse(code=500, message="model source directory is missing", data=None)
 
     release_root = ensure_dir(settings.release_path_resolved)
-    relative_model_path = _build_relative_model_path(
+    publish_subdir = _build_publish_subdir(
         user_id=request.user_id,
         version=request.version,
         job_id=request.job_id,
     )
-    relative_dir = Path(relative_model_path).parent
-    publish_dir = release_root / relative_dir
+    publish_dir = release_root / publish_subdir
 
     try:
         if publish_dir.exists():
@@ -65,6 +64,5 @@ async def publish_model(
     return ModelPublishResponse(
         code=0,
         message="success",
-        data=ModelPublishData(model_path=relative_model_path),
+        data=ModelPublishData(model_path=str(publish_dir.resolve())),
     )
-
