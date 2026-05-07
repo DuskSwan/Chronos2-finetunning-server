@@ -588,7 +588,7 @@ Content-Type: `application/json`
 时间字段: ISO 8601（UTC）  
 认证:
 - 旧接口（`/v1/finetune/*`, `/v1/tools/*`, `/health`）默认无认证
-- 兼容接口（`/api/v1/train_jobs*`, `/api/model/publish`）使用 Bearer Token（`API_BEARER_TOKEN` 非空时启用）
+- 兼容接口（`/api/v1/train_jobs*`, `/api/model/publish`, `/api/model/infer`）使用 Bearer Token（`API_BEARER_TOKEN` 非空时启用）
 
 ### 旧接口（保持兼容）
 
@@ -733,7 +733,7 @@ Content-Type: `application/json`
 
 #### POST /api/model/publish
 
-用途: 模型发布兼容接口（返回相对模型路径）。  
+用途: 模型发布兼容接口（返回发布目录绝对路径）。  
 鉴权: Bearer Token（配置启用时）
 
 请求体:
@@ -753,7 +753,7 @@ Content-Type: `application/json`
   "code": 0,
   "message": "success",
   "data": {
-    "model_path": "models/user_10001/v1.0.0/train_job_20260121103000/model.bin"
+    "model_path": "/abs/path/to/release/models/user_10001/v1.0.0/train_job_20260121103000"
   }
 }
 ```
@@ -769,8 +769,101 @@ Content-Type: `application/json`
 ```
 
 说明:
-- `model_path` 为相对路径，根目录由 `RELEASE_PATH` 决定。
+- `model_path` 为发布目录绝对路径。
 - 同一 `user_id + version + job_id` 多次调用，返回路径保持一致（覆盖发布）。
+
+#### POST /api/model/infer
+
+用途: 使用已发布模型进行推理预测。  
+鉴权: Bearer Token（配置启用时）
+
+请求体:
+
+```json
+{
+  "model_path": "/abs/path/to/release/models/user_10001/v1.0.0/train_job_20260121103000",
+  "cov_group": [
+    {
+      "target": "value1",
+      "covariates": ["value2", "value3"]
+    },
+    {
+      "target": "value2",
+      "covariates": ["value1", "value4"]
+    }
+  ],
+  "prediction_length": 3,
+  "csv_path": "/abs/path/to/new_data.csv"
+}
+```
+
+请求参数说明:
+
+| 字段 | 类型 | 必需 | 说明 |
+| ---- | ---- | ---- | ---- |
+| `model_path` | str | 是 | 发布后的模型目录绝对路径 |
+| `cov_group` | list[object] | 是 | 推理分组列表，元素形如 `{"target":"...","covariates":["..."]}` |
+| `prediction_length` | int | 是 | 预测长度（正整数） |
+| `csv_path` | str | 是 | 推理输入 CSV 路径 |
+
+成功响应 200:
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "predictions": [
+      {
+        "target": "value1",
+        "prediction": [0.1, 0.2, 0.3]
+      },
+      {
+        "target": "value2",
+        "prediction": [0.4, 0.5, 0.6]
+      }
+    ]
+  }
+}
+```
+
+失败响应示例:
+
+```json
+{
+  "code": 404,
+  "message": "model path not found",
+  "data": null
+}
+```
+
+```json
+{
+  "code": 404,
+  "message": "csv_path not found",
+  "data": null
+}
+```
+
+```json
+{
+  "code": 400,
+  "message": "history length is insufficient",
+  "data": null
+}
+```
+
+```json
+{
+  "code": 404,
+  "message": "model for target 'value1' not found",
+  "data": null
+}
+```
+
+说明:
+- 推理时每个 `cov_group` 会按 `target` 选择对应子模型目录：`finetuned-ckpt_<target>`。
+- 一次请求包含多个 `target` 时，会逐组推理并按 `cov_group` 顺序返回结果。
 
 ## 测试
 
