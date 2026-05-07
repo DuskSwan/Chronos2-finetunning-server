@@ -164,6 +164,97 @@ def test_infer_model_missing_target_model(client: TestClient):
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["code"] == 500
+    assert body["code"] == 404
     assert body["message"] == "model for target 'value1' not found"
+    assert body["data"] is None
+
+
+def test_infer_model_path_not_found(client: TestClient):
+    repo_root = Path(__file__).resolve().parents[1]
+    csv_path = repo_root / "mock_train_data.csv"
+
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str((repo_root / "release" / "missing_model_dir").resolve()),
+            "cov_group": [{"target": "value1", "covariates": ["value2"]}],
+            "prediction_length": 3,
+            "csv_path": str(csv_path.resolve()),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 404
+    assert body["message"] == "model path not found"
+    assert body["data"] is None
+
+
+def test_infer_csv_path_not_found(client: TestClient):
+    repo_root = Path(__file__).resolve().parents[1]
+    model_root = repo_root / "release" / "models" / "user_10001" / "v1.0.0" / "job_z"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str(model_root.resolve()),
+            "cov_group": [{"target": "value1", "covariates": ["value2"]}],
+            "prediction_length": 3,
+            "csv_path": str((repo_root / "not_exists.csv").resolve()),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 404
+    assert body["message"] == "csv_path not found"
+    assert body["data"] is None
+
+
+def test_infer_history_length_insufficient(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "tiny.csv"
+    csv_path.write_text("value1,value2\n1,2\n", encoding="utf-8")
+
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_tiny"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str(model_root.resolve()),
+            "cov_group": [{"target": "value1", "covariates": ["value2"]}],
+            "prediction_length": 3,
+            "csv_path": str(csv_path.resolve()),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 400
+    assert body["message"] == "history length is insufficient"
+    assert body["data"] is None
+
+
+def test_infer_covariate_mismatch(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "mismatch.csv"
+    csv_path.write_text("value1,value2\n1,2\n3,4\n", encoding="utf-8")
+
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_mismatch"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str(model_root.resolve()),
+            "cov_group": [{"target": "value1", "covariates": ["missing_col"]}],
+            "prediction_length": 3,
+            "csv_path": str(csv_path.resolve()),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 400
+    assert "invalid csv data:" in body["message"]
     assert body["data"] is None

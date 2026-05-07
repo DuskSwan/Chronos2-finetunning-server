@@ -26,7 +26,7 @@ def _resolve_target_model_dir(release_model_dir: Path, target: str) -> Path:
     if candidate.exists() and candidate.is_dir():
         return candidate
 
-    raise InferenceError(500, f"model for target '{target}' not found")
+    raise InferenceError(404, f"model for target '{target}' not found")
 
 
 def _to_float_list(prediction: Any) -> list[float]:
@@ -49,11 +49,11 @@ def run_inference(
     """执行推理并返回按 cov_group 顺序的预测结果。"""
     release_model_dir = Path(model_path)
     if not release_model_dir.exists() or not release_model_dir.is_dir():
-        raise InferenceError(500, "model path not found")
+        raise InferenceError(404, "model path not found")
 
     csv_file = Path(csv_path)
     if not csv_file.exists() or not csv_file.is_file():
-        raise InferenceError(500, "csv_path not found")
+        raise InferenceError(404, "csv_path not found")
 
     required_columns: list[str] = []
     for group in cov_group:
@@ -64,10 +64,10 @@ def run_inference(
     try:
         df = load_data(str(csv_file), target_columns=required_columns)
     except Exception as exc:
-        raise InferenceError(500, f"invalid csv data: {exc}") from exc
+        raise InferenceError(400, f"invalid csv data: {exc}") from exc
 
     if df.shape[0] < 2:
-        raise InferenceError(500, "history length is insufficient")
+        raise InferenceError(400, "history length is insufficient")
 
     predictions: list[InferPredictionItem] = []
     for group in cov_group:
