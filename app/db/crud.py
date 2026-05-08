@@ -66,6 +66,16 @@ def get_job_by_id(db: Session, job_id: str) -> Optional[FinetuneJob]:
     return db.query(FinetuneJob).filter(FinetuneJob.id == job_id).first()
 
 
+def list_jobs_by_status(db: Session, status: str) -> list[FinetuneJob]:
+    """按状态获取任务列表（按创建时间升序）。"""
+    return (
+        db.query(FinetuneJob)
+        .filter(FinetuneJob.status == status)
+        .order_by(FinetuneJob.created_at.asc())
+        .all()
+    )
+
+
 def list_jobs(
     db: Session,
     skip: int = 0,
@@ -83,6 +93,13 @@ def list_jobs(
         FinetuneJob 实例列表
     """
     return db.query(FinetuneJob).offset(skip).limit(limit).all()
+
+
+def delete_job_by_id(db: Session, job_id: str) -> bool:
+    """按 ID 删除任务。"""
+    rows = db.query(FinetuneJob).filter(FinetuneJob.id == job_id).delete()
+    db.commit()
+    return rows > 0
 
 
 def list_recent_jobs(

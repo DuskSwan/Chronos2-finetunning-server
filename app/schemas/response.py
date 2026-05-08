@@ -75,6 +75,25 @@ class CancelJobResponse(BaseModel):
     message: Optional[str] = Field(default=None, description="取消结果说明")
 
 
+class DeleteJobResponse(BaseModel):
+    """删除单任务响应。"""
+    job_id: str = Field(description="唯一任务标识符")
+    deleted: bool = Field(description="是否删除成功")
+    removed_from_queue: bool = Field(description="是否从队列移除")
+    files_deleted: int = Field(description="删除的本地文件/目录数量")
+    message: Optional[str] = Field(default=None, description="删除结果说明")
+
+
+class BatchDeleteJobsResponse(BaseModel):
+    """批量删除任务响应。"""
+    matched_jobs: int = Field(description="匹配到的任务数量")
+    deleted_jobs: int = Field(description="成功删除的任务数量")
+    skipped_running_jobs: int = Field(description="跳过的 running 任务数量")
+    removed_from_queue: int = Field(description="从队列移除的任务数量")
+    files_deleted: int = Field(description="删除的本地文件/目录数量")
+    message: Optional[str] = Field(default=None, description="删除结果说明")
+
+
 class ReleaseModelData(BaseModel):
     """发布模型的数据体。"""
 

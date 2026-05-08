@@ -5,7 +5,7 @@
 """
 
 from queue import Queue
-from typing import Optional
+from typing import Iterable, Optional
 
 
 class JobQueue:
@@ -56,6 +56,35 @@ class JobQueue:
             True 若队列为空，否则 False。
         """
         return self._queue.empty()
+
+    def remove(self, job_id: str) -> bool:
+        """从队列中移除指定任务 ID。"""
+        with self._queue.mutex:
+            q = self._queue.queue
+            try:
+                q.remove(job_id)
+                self._queue.unfinished_tasks = max(0, self._queue.unfinished_tasks - 1)
+                self._queue.not_full.notify()
+                return True
+            except ValueError:
+                return False
+
+    def remove_many(self, job_ids: Iterable[str]) -> int:
+        """从队列中移除多个任务 ID，返回实际移除数量。"""
+        targets = set(job_ids)
+        if not targets:
+            return 0
+        removed = 0
+        with self._queue.mutex:
+            old = list(self._queue.queue)
+            kept = [job_id for job_id in old if job_id not in targets]
+            removed = len(old) - len(kept)
+            if removed > 0:
+                self._queue.queue.clear()
+                self._queue.queue.extend(kept)
+                self._queue.unfinished_tasks = max(0, self._queue.unfinished_tasks - removed)
+                self._queue.not_full.notify_all()
+        return removed
 
 
 # 全局队列实例

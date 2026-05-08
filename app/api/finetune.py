@@ -24,6 +24,8 @@ from app.schemas.response import (
     JobDetailResponse,
     JobListResponse,
     CancelJobResponse,
+    DeleteJobResponse,
+    BatchDeleteJobsResponse,
     ReleaseModelResponse,
     ReleaseModelData,
 )
@@ -32,6 +34,8 @@ from app.services.job_service import (
     read_job_log,
     list_job_summaries_with_status,
     request_cancel_job,
+    delete_single_job,
+    batch_delete_jobs,
 )
 from app.services.queue_service import get_job_queue
 
@@ -230,6 +234,31 @@ async def cancel_finetune_job(
 ) -> CancelJobResponse:
     """取消任务（协作式取消）。"""
     return request_cancel_job(db, job_id)
+
+
+@router.delete(
+    "/jobs/{job_id}",
+    response_model=DeleteJobResponse,
+)
+async def delete_finetune_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+) -> DeleteJobResponse:
+    """删除单个任务。running 任务需先取消。"""
+    return delete_single_job(db, job_id)
+
+
+@router.delete(
+    "/jobs",
+    response_model=BatchDeleteJobsResponse,
+)
+async def delete_finetune_jobs(
+    status: str | None = None,
+    all: bool = False,
+    db: Session = Depends(get_db),
+) -> BatchDeleteJobsResponse:
+    """批量删除任务：按状态删除，或 all=true 全部删除。"""
+    return batch_delete_jobs(db, job_status=status, delete_all=all)
 
 
 @router.post(

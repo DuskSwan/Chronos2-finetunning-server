@@ -24,6 +24,9 @@ from app.db.crud import (
     set_cancel_requested,
     mark_job_cancelled,
     list_job_loss_points,
+    list_jobs_by_status,
+    delete_job_by_id,
+    list_jobs,
 )
 from app.core.enums import JobStatus
 from app.core.config import Settings
@@ -33,7 +36,10 @@ from app.schemas.response import (
     JobListItemResponse,
     JobListResponse,
     CancelJobResponse,
+    DeleteJobResponse,
+    BatchDeleteJobsResponse,
 )
+from app.services.queue_service import get_job_queue
 
 
 def _deserialize_model_paths(value: Optional[str]) -> Optional[list[str]]:
@@ -467,4 +473,115 @@ def request_cancel_job(db: Any, job_id: str) -> CancelJobResponse:
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail=f"当前状态无法取消: {job.status}",
+    )
+
+
+def _delete_job_local_files(job: Any) -> int:
+    """删除任务相关本地产物（不包含发布目录）。"""
+    deleted = 0
+
+    output_dir = getattr(job, "output_dir", None)
+    if output_dir:
+        path = Path(output_dir)
+        if path.exists() and path.is_dir():
+            import shutil
+            shutil.rmtree(path, ignore_errors=True)
+            deleted += 1
+
+    log_path = getattr(job, "log_path", None)
+    if log_path:
+        path = Path(log_path)
+        if path.exists() and path.is_file():
+            path.unlink(missing_ok=True)
+            deleted += 1
+
+    return deleted
+
+
+def delete_single_job(db: Any, job_id: str) -> DeleteJobResponse:
+    """删除单个任务。running 状态不允许直接删除。"""
+    job = get_job_by_id(db, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"任务不存在: {job_id}",
+        )
+
+    if job.status == JobStatus.running.value:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="running 任务不能直接删除，请先取消任务后再删除",
+        )
+
+    queue = get_job_queue()
+    removed_from_queue = queue.remove(job_id)
+    files_deleted = _delete_job_local_files(job)
+    deleted = delete_job_by_id(db, job_id)
+
+    return DeleteJobResponse(
+        job_id=job_id,
+        deleted=deleted,
+        removed_from_queue=removed_from_queue,
+        files_deleted=files_deleted,
+        message="任务已删除",
+    )
+
+
+def batch_delete_jobs(
+    db: Any,
+    job_status: Optional[str] = None,
+    delete_all: bool = False,
+) -> BatchDeleteJobsResponse:
+    """批量删除任务，可按状态删除或全量删除。"""
+    if delete_all and job_status is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="all=true 时不允许同时传 status",
+        )
+    if (not delete_all) and (job_status is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请传 status 或 all=true",
+        )
+
+    valid_status = {
+        JobStatus.queued.value,
+        JobStatus.running.value,
+        JobStatus.completed.value,
+        JobStatus.failed.value,
+        JobStatus.cancelled.value,
+    }
+    if job_status is not None and job_status not in valid_status:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"status 必须是 {sorted(valid_status)} 之一",
+        )
+
+    candidates = list_jobs(db) if delete_all else list_jobs_by_status(db, job_status or "")
+    queue = get_job_queue()
+
+    matched_jobs = len(candidates)
+    deleted_jobs = 0
+    skipped_running_jobs = 0
+    removed_from_queue = 0
+    files_deleted = 0
+
+    for job in candidates:
+        if job.status == JobStatus.running.value:
+            skipped_running_jobs += 1
+            continue
+
+        if queue.remove(job.id):
+            removed_from_queue += 1
+        files_deleted += _delete_job_local_files(job)
+        if delete_job_by_id(db, job.id):
+            deleted_jobs += 1
+
+    return BatchDeleteJobsResponse(
+        matched_jobs=matched_jobs,
+        deleted_jobs=deleted_jobs,
+        skipped_running_jobs=skipped_running_jobs,
+        removed_from_queue=removed_from_queue,
+        files_deleted=files_deleted,
+        message="批量删除完成",
     )

@@ -369,6 +369,30 @@ curl -X POST http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/cancel
 - `running` / `failed` / `cancelled`：返回当前已写入数据库的部分曲线。
 - `completed`：返回完整曲线。
 
+### 删除任务
+
+1) 删除单个任务
+
+```bash
+curl -X DELETE http://127.0.0.1:8011/v1/finetune/jobs/<job_id>
+```
+
+说明：
+- `queued` / `completed` / `failed` / `cancelled`：可直接删除（会清理任务目录与日志，不处理发布目录）。
+- `running`：不允许直接删除，需先调用取消接口，待任务结束后再删除。
+
+1) 批量删除任务（按状态）
+
+```bash
+curl -X DELETE "http://127.0.0.1:8011/v1/finetune/jobs?status=queued"
+```
+
+1) 批量删除任务（全部）
+
+```bash
+curl -X DELETE "http://127.0.0.1:8011/v1/finetune/jobs?all=true"
+```
+
 ### 任务目录结构
 
 任务创建后，会在 `artifacts/` 下生成以下结构：
@@ -667,6 +691,69 @@ Content-Type: `application/json`
 #### POST /v1/finetune/jobs/{job_id}/cancel
 
 用途: 请求取消任务（协作式取消）
+
+#### DELETE /v1/finetune/jobs/{job_id}
+
+用途: 删除单个任务。  
+说明:
+- `queued` / `completed` / `failed` / `cancelled`：可直接删除（会清理任务目录与日志，不处理发布目录）。
+- `running`：不能直接删除，需先调用取消接口，等待状态变为非 `running` 后再删除。
+
+成功响应 200:
+
+```json
+{
+  "job_id": "550e8400-e29b-41d4-a716-446655440000",
+  "deleted": true,
+  "removed_from_queue": true,
+  "files_deleted": 2,
+  "message": "任务已删除"
+}
+```
+
+失败响应示例:
+
+```json
+{
+  "detail": "running 任务不能直接删除，请先取消任务后再删除"
+}
+```
+
+#### DELETE /v1/finetune/jobs
+
+用途: 批量删除任务。  
+查询参数（二选一）:
+- `status` (str): `queued` / `running` / `completed` / `failed` / `cancelled`
+- `all` (bool): `true` 表示删除全部任务（`running` 会跳过）
+
+成功响应 200:
+
+```json
+{
+  "matched_jobs": 12,
+  "deleted_jobs": 10,
+  "skipped_running_jobs": 2,
+  "removed_from_queue": 4,
+  "files_deleted": 14,
+  "message": "批量删除完成"
+}
+```
+
+失败响应示例（参数冲突）:
+
+```json
+{
+  "detail": "all=true 时不允许同时传 status"
+}
+```
+
+失败响应示例（参数缺失）:
+
+```json
+{
+  "detail": "请传 status 或 all=true"
+}
+```
 
 #### POST /v1/finetune/jobs/release
 
