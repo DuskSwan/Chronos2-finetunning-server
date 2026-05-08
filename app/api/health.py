@@ -3,6 +3,7 @@
 """
 
 from fastapi import APIRouter
+from loguru import logger
 
 from app.schemas.response import HealthCheckResponse
 
@@ -17,4 +18,6 @@ async def health_check() -> HealthCheckResponse:
     返回：
         包含状态 "ok" 的 HealthCheckResponse
     """
-    return HealthCheckResponse(status="ok")
+    response = HealthCheckResponse(status="ok")
+    logger.info("health_check response: {}", response.model_dump())
+    return response

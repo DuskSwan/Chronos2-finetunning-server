@@ -5,6 +5,7 @@ import uuid
 
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_bearer_token
@@ -62,11 +63,13 @@ async def create_train_job(
             max_steps=int(payload.get("num_steps", 0)),
         )
         get_job_queue().enqueue(job_id)
-        return ApiResponse(
+        response = ApiResponse(
             code=0,
             message="success",
             data=CreateTrainJobData(job_id=job_id),
         )
+        logger.info("create_train_job response: {}", response.model_dump())
+        return response
     except Exception as exc:
         raise normalize_api_error(exc) from exc
 
@@ -81,7 +84,9 @@ async def get_train_job_status(
     try:
         detail = get_job_detail(db, job_id)
         data = adapt_job_detail(detail)
-        return ApiResponse(code=0, message="success", data=data)
+        response = ApiResponse(code=0, message="success", data=data)
+        logger.info("get_train_job_status response: {}", response.model_dump())
+        return response
     except Exception as exc:
         normalized = normalize_api_error(exc)
         if normalized.code == 40401:

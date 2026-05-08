@@ -1,6 +1,7 @@
 """模型推理接口。"""
 
 from fastapi import APIRouter, Depends
+from loguru import logger
 
 from app.core.auth import require_bearer_token
 from app.schemas.request import ModelInferRequest
@@ -25,10 +26,14 @@ async def infer_model(
             csv_path=request.csv_path,
         )
     except InferenceError as exc:
-        return ModelInferResponse(code=exc.code, message=exc.message, data=None)
+        response = ModelInferResponse(code=exc.code, message=exc.message, data=None)
+        logger.info("infer_model response: {}", response.model_dump())
+        return response
 
-    return ModelInferResponse(
+    response = ModelInferResponse(
         code=0,
         message="success",
         data=ModelInferData(predictions=predictions),
     )
+    logger.info("infer_model response: {}", response.model_dump())
+    return response

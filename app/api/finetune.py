@@ -42,6 +42,13 @@ from app.services.queue_service import get_job_queue
 router = APIRouter(prefix="/v1/finetune", tags=["finetune"])
 
 
+def _log_response(endpoint: str, response: object) -> None:
+    if hasattr(response, "model_dump"):
+        logger.info("{} response: {}", endpoint, response.model_dump())
+        return
+    logger.info("{} response: {}", endpoint, str(response))
+
+
 def validate_request(request: CreateFinetuneJobRequest) -> dict:
     """
     验证微调任务请求。
@@ -179,10 +186,12 @@ async def create_finetune_job(
     queue = get_job_queue()
     queue.enqueue(job_id)
     
-    return CreateFinetuneJobResponse(
+    response = CreateFinetuneJobResponse(
         job_id=job_id,
         status=JobStatus.queued.value,
     )
+    _log_response("create_finetune_job", response)
+    return response
 
 
 @router.get(
@@ -194,7 +203,9 @@ async def get_finetune_job_detail(
     db: Session = Depends(get_db),
 ) -> JobDetailResponse:
     """查询任务详情。"""
-    return get_job_detail(db, job_id)
+    response = get_job_detail(db, job_id)
+    _log_response("get_finetune_job_detail", response)
+    return response
 
 
 @router.get(
@@ -208,7 +219,9 @@ async def get_finetune_job_logs(
 ) -> PlainTextResponse:
     """查询任务日志。"""
     log_text = read_job_log(db, job_id, tail=tail)
-    return PlainTextResponse(log_text)
+    response = PlainTextResponse(log_text)
+    _log_response("get_finetune_job_logs", log_text)
+    return response
 
 
 @router.get(
@@ -221,7 +234,9 @@ async def list_finetune_jobs(
     db: Session = Depends(get_db),
 ) -> JobListResponse:
     """查询任务列表（最近若干条）。"""
-    return list_job_summaries_with_status(db, limit=limit, job_status=status)
+    response = list_job_summaries_with_status(db, limit=limit, job_status=status)
+    _log_response("list_finetune_jobs", response)
+    return response
 
 
 @router.post(
@@ -233,7 +248,9 @@ async def cancel_finetune_job(
     db: Session = Depends(get_db),
 ) -> CancelJobResponse:
     """取消任务（协作式取消）。"""
-    return request_cancel_job(db, job_id)
+    response = request_cancel_job(db, job_id)
+    _log_response("cancel_finetune_job", response)
+    return response
 
 
 @router.delete(
@@ -245,7 +262,9 @@ async def delete_finetune_job(
     db: Session = Depends(get_db),
 ) -> DeleteJobResponse:
     """删除单个任务。running 任务需先取消。"""
-    return delete_single_job(db, job_id)
+    response = delete_single_job(db, job_id)
+    _log_response("delete_finetune_job", response)
+    return response
 
 
 @router.delete(
@@ -258,7 +277,9 @@ async def delete_finetune_jobs(
     db: Session = Depends(get_db),
 ) -> BatchDeleteJobsResponse:
     """批量删除任务：按状态删除，或 all=true 全部删除。"""
-    return batch_delete_jobs(db, job_status=status, delete_all=all)
+    response = batch_delete_jobs(db, job_status=status, delete_all=all)
+    _log_response("delete_finetune_jobs", response)
+    return response
 
 
 @router.post(
@@ -278,11 +299,13 @@ async def release_finetuned_model(
         or not request.version
         or not request.version.strip()
     ):
-        return ReleaseModelResponse(
+        response = ReleaseModelResponse(
             code=401,
             message="invalid parameter",
             data=ReleaseModelData(model_path=""),
         )
+        _log_response("release_finetuned_model", response)
+        return response
 
     user_id = request.user_id.strip()
     job_id = request.job_id.strip()
@@ -290,33 +313,41 @@ async def release_finetuned_model(
 
     job = get_job_by_id(db, job_id)
     if not job:
-        return ReleaseModelResponse(
+        response = ReleaseModelResponse(
             code=404,
             message=f"job not found: {job_id}",
             data=ReleaseModelData(model_path=""),
         )
+        _log_response("release_finetuned_model", response)
+        return response
 
     if job.status != JobStatus.completed.value:
-        return ReleaseModelResponse(
+        response = ReleaseModelResponse(
             code=409,
             message=f"job status is not completed: {job.status}",
             data=ReleaseModelData(model_path=""),
         )
+        _log_response("release_finetuned_model", response)
+        return response
 
     if not job.output_dir:
-        return ReleaseModelResponse(
+        response = ReleaseModelResponse(
             code=404,
             message="model directory not found",
             data=ReleaseModelData(model_path=""),
         )
+        _log_response("release_finetuned_model", response)
+        return response
 
     source_dir = Path(job.output_dir)
     if not source_dir.exists() or not source_dir.is_dir():
-        return ReleaseModelResponse(
+        response = ReleaseModelResponse(
             code=404,
             message=f"model directory not found: {source_dir}",
             data=ReleaseModelData(model_path=""),
         )
+        _log_response("release_finetuned_model", response)
+        return response
 
     release_name = f"{user_id}_{job_id}_{version}"
     settings = get_settings()
@@ -328,14 +359,18 @@ async def release_finetuned_model(
             shutil.rmtree(release_dir)
         shutil.copytree(src=source_dir, dst=release_dir)
     except Exception as exc:
-        return ReleaseModelResponse(
+        response = ReleaseModelResponse(
             code=500,
             message=f"release failed: {exc}",
             data=ReleaseModelData(model_path=""),
         )
+        _log_response("release_finetuned_model", response)
+        return response
 
-    return ReleaseModelResponse(
+    response = ReleaseModelResponse(
         code=0,
         message="success",
         data=ReleaseModelData(model_path=str(release_dir.resolve())),
     )
+    _log_response("release_finetuned_model", response)
+    return response

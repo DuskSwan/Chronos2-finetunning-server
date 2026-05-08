@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_bearer_token
@@ -33,17 +34,25 @@ async def publish_model(
 
     job = get_job_by_id(db, request.job_id)
     if not job:
-        return ModelPublishResponse(code=404, message="job_id not found", data=None)
+        response = ModelPublishResponse(code=404, message="job_id not found", data=None)
+        logger.info("publish_model response: {}", response.model_dump())
+        return response
 
     if job.status != JobStatus.completed.value:
-        return ModelPublishResponse(code=500, message="job is not completed", data=None)
+        response = ModelPublishResponse(code=500, message="job is not completed", data=None)
+        logger.info("publish_model response: {}", response.model_dump())
+        return response
 
     if not job.output_dir:
-        return ModelPublishResponse(code=500, message="model source directory is missing", data=None)
+        response = ModelPublishResponse(code=500, message="model source directory is missing", data=None)
+        logger.info("publish_model response: {}", response.model_dump())
+        return response
 
     source_dir = Path(job.output_dir)
     if not source_dir.exists() or not source_dir.is_dir():
-        return ModelPublishResponse(code=500, message="model source directory is missing", data=None)
+        response = ModelPublishResponse(code=500, message="model source directory is missing", data=None)
+        logger.info("publish_model response: {}", response.model_dump())
+        return response
 
     release_root = ensure_dir(settings.release_path_resolved)
     publish_subdir = _build_publish_subdir(
@@ -59,10 +68,14 @@ async def publish_model(
         publish_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source_dir, publish_dir)
     except Exception:
-        return ModelPublishResponse(code=500, message="internal error", data=None)
+        response = ModelPublishResponse(code=500, message="internal error", data=None)
+        logger.info("publish_model response: {}", response.model_dump())
+        return response
 
-    return ModelPublishResponse(
+    response = ModelPublishResponse(
         code=0,
         message="success",
         data=ModelPublishData(model_path=str(publish_dir.resolve())),
     )
+    logger.info("publish_model response: {}", response.model_dump())
+    return response
