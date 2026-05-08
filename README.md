@@ -323,10 +323,19 @@ curl http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/logs
 curl "http://127.0.0.1:8011/v1/finetune/jobs/<job_id>/logs?tail=200"
 ```
 
-1) 任务列表（可选）
+1) 任务列表
 
 ```bash
 curl "http://127.0.0.1:8011/v1/finetune/jobs?limit=20"
+
+# 仅查看排队中任务
+curl "http://127.0.0.1:8011/v1/finetune/jobs?limit=20&status=queued"
+
+# 仅查看进行中任务
+curl "http://127.0.0.1:8011/v1/finetune/jobs?limit=20&status=running"
+
+# 仅查看已完成任务
+curl "http://127.0.0.1:8011/v1/finetune/jobs?limit=20&status=completed"
 ```
 
 ### 取消任务
@@ -632,7 +641,9 @@ Content-Type: `application/json`
 #### GET /v1/finetune/jobs
 
 用途: 查询最近任务列表  
-查询参数: `limit` (int, 默认 20)
+查询参数:
+- `limit` (int, 默认 20)
+- `status` (str, 可选): `queued` / `running` / `completed`
 
 #### GET /v1/finetune/jobs/{job_id}
 

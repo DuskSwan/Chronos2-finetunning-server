@@ -30,7 +30,7 @@ from app.schemas.response import (
 from app.services.job_service import (
     get_job_detail,
     read_job_log,
-    list_job_summaries,
+    list_job_summaries_with_status,
     request_cancel_job,
 )
 from app.services.queue_service import get_job_queue
@@ -213,10 +213,11 @@ async def get_finetune_job_logs(
 )
 async def list_finetune_jobs(
     limit: int = 20,
+    status: str | None = None,
     db: Session = Depends(get_db),
 ) -> JobListResponse:
     """查询任务列表（最近若干条）。"""
-    return list_job_summaries(db, limit=limit)
+    return list_job_summaries_with_status(db, limit=limit, job_status=status)
 
 
 @router.post(

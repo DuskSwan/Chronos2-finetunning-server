@@ -20,6 +20,7 @@ from app.db.crud import (
     mark_job_completed,
     mark_job_failed,
     list_recent_jobs,
+    list_recent_jobs_by_status,
     set_cancel_requested,
     mark_job_cancelled,
     list_job_loss_points,
@@ -369,6 +370,49 @@ def list_job_summaries(db: Any, limit: int = 20) -> JobListResponse:
         )
 
     jobs = list_recent_jobs(db, limit=limit)
+    items = [
+        JobListItemResponse(
+            job_id=job.id,
+            status=job.status,
+            created_at=job.created_at,
+            started_at=job.started_at,
+            finished_at=job.finished_at,
+        )
+        for job in jobs
+    ]
+
+    return JobListResponse(items=items)
+
+
+def list_job_summaries_with_status(
+    db: Any,
+    limit: int = 20,
+    job_status: Optional[str] = None,
+) -> JobListResponse:
+    """获取任务列表摘要（支持按状态过滤）。"""
+    if limit <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="limit 必须是正整数",
+        )
+
+    valid_status = {
+        JobStatus.queued.value,
+        JobStatus.running.value,
+        JobStatus.completed.value,
+    }
+
+    if job_status is not None and job_status not in valid_status:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"status 必须是 {sorted(valid_status)} 之一",
+        )
+
+    if job_status is None:
+        jobs = list_recent_jobs(db, limit=limit)
+    else:
+        jobs = list_recent_jobs_by_status(db, status=job_status, limit=limit)
+
     items = [
         JobListItemResponse(
             job_id=job.id,

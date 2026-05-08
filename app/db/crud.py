@@ -106,6 +106,21 @@ def list_recent_jobs(
     )
 
 
+def list_recent_jobs_by_status(
+    db: Session,
+    status: str,
+    limit: int = 20,
+) -> list[FinetuneJob]:
+    """按状态获取最近创建的任务列表（按创建时间倒序）。"""
+    return (
+        db.query(FinetuneJob)
+        .filter(FinetuneJob.status == status)
+        .order_by(FinetuneJob.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 def list_queued_jobs(db: Session) -> list[FinetuneJob]:
     """按创建时间升序获取处于 queued 状态的任务。"""
     return (
