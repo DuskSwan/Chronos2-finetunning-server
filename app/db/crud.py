@@ -131,6 +131,16 @@ def list_queued_jobs(db: Session) -> list[FinetuneJob]:
     )
 
 
+def list_running_jobs(db: Session) -> list[FinetuneJob]:
+    """按创建时间升序获取处于 running 状态的任务。"""
+    return (
+        db.query(FinetuneJob)
+        .filter(FinetuneJob.status == JobStatus.running.value)
+        .order_by(FinetuneJob.created_at.asc())
+        .all()
+    )
+
+
 def update_job_status(
     db: Session,
     job_id: str,

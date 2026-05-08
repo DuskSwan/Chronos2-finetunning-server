@@ -114,7 +114,8 @@ python -m app.main
 
 1. 初始化 SQLite 数据库
 2. 创建必要目录（artifacts, logs）
-3. 启动后台 worker 线程
+3. 恢复数据库中 `queued`/`running` 任务并重新入队（`running` 会从头重新训练）
+4. 启动后台 worker 线程
 
 ### 健康检查
 
