@@ -379,7 +379,7 @@ curl -X DELETE http://127.0.0.1:8011/v1/finetune/jobs/<job_id>
 
 说明：
 - `queued` / `completed` / `failed` / `cancelled`：可直接删除（会清理任务目录与日志，不处理发布目录）。
-- `running`：不允许直接删除，需先调用取消接口，待任务结束后再删除。
+- `running`：接口会先内部发起取消，等待任务退出 `running` 后再删除；若等待超时会返回冲突错误。
 
 1) 批量删除任务（按状态）
 
@@ -715,7 +715,7 @@ Content-Type: `application/json`
 
 ```json
 {
-  "detail": "running 任务不能直接删除，请先取消任务后再删除"
+  "detail": "running 任务取消超时，请稍后重试删除"
 }
 ```
 
@@ -724,7 +724,7 @@ Content-Type: `application/json`
 用途: 批量删除任务。  
 查询参数（二选一）:
 - `status` (str): `queued` / `running` / `completed` / `failed` / `cancelled`
-- `all` (bool): `true` 表示删除全部任务（`running` 会跳过）
+- `all` (bool): `true` 表示删除全部任务（`running` 会先尝试内部取消，超时的会跳过）
 
 成功响应 200:
 

@@ -7,6 +7,7 @@
 from pathlib import Path
 from typing import Any, Dict, Optional
 import json
+import time
 from datetime import datetime, timezone
 from collections import defaultdict
 
@@ -498,8 +499,31 @@ def _delete_job_local_files(job: Any) -> int:
     return deleted
 
 
+def _cancel_running_and_wait(
+    db: Any,
+    job_id: str,
+    timeout_seconds: float = 15.0,
+    poll_interval_seconds: float = 0.2,
+) -> Any:
+    """对 running 任务发起取消并等待其退出 running。"""
+    set_cancel_requested(db, job_id, True)
+    deadline = time.time() + timeout_seconds
+
+    while time.time() < deadline:
+        db.expire_all()
+        job = get_job_by_id(db, job_id)
+        if job is None:
+            return None
+        if job.status != JobStatus.running.value:
+            return job
+        time.sleep(poll_interval_seconds)
+
+    db.expire_all()
+    return get_job_by_id(db, job_id)
+
+
 def delete_single_job(db: Any, job_id: str) -> DeleteJobResponse:
-    """删除单个任务。running 状态不允许直接删除。"""
+    """删除单个任务。running 状态会先取消，待退出后再删除。"""
     job = get_job_by_id(db, job_id)
     if not job:
         raise HTTPException(
@@ -508,10 +532,17 @@ def delete_single_job(db: Any, job_id: str) -> DeleteJobResponse:
         )
 
     if job.status == JobStatus.running.value:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="running 任务不能直接删除，请先取消任务后再删除",
-        )
+        job = _cancel_running_and_wait(db, job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"任务不存在: {job_id}",
+            )
+        if job.status == JobStatus.running.value:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="running 任务取消超时，请稍后重试删除",
+            )
 
     queue = get_job_queue()
     removed_from_queue = queue.remove(job_id)
@@ -568,8 +599,13 @@ def batch_delete_jobs(
 
     for job in candidates:
         if job.status == JobStatus.running.value:
-            skipped_running_jobs += 1
-            continue
+            waited_job = _cancel_running_and_wait(db, job.id)
+            if waited_job is None:
+                continue
+            if waited_job.status == JobStatus.running.value:
+                skipped_running_jobs += 1
+                continue
+            job = waited_job
 
         if queue.remove(job.id):
             removed_from_queue += 1
