@@ -15,7 +15,10 @@ from app.api import health, finetune, tools, train_jobs, model_publish, inferenc
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.paths import ensure_dir
+from app.db.crud import list_queued_jobs
 from app.db.init_db import init_db
+from app.db.session import SessionLocal
+from app.services.queue_service import get_job_queue
 from app.services.queue_service import initialize_queue
 from app.services.train_job_adapter import normalize_api_error
 from app.workers.trainer_worker import initialize_worker
@@ -75,6 +78,19 @@ def initialize_directories() -> None:
     ensure_dir(settings.sqlite_db_path_resolved.parent)
 
 
+def requeue_pending_jobs() -> int:
+    """服务启动时将数据库中 queued 任务重新入队。"""
+    db = SessionLocal()
+    try:
+        queued_jobs = list_queued_jobs(db)
+        queue = get_job_queue()
+        for job in queued_jobs:
+            queue.enqueue(job.id)
+        return len(queued_jobs)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理。
@@ -85,8 +101,9 @@ async def lifespan(app: FastAPI):
     logger.info("应用启动中...")
     settings = get_settings()
     initialize_queue()
+    recovered = requeue_pending_jobs()
     initialize_worker(settings)
-    logger.info("队列和后台 Worker 已初始化")
+    logger.info(f"队列和后台 Worker 已初始化，恢复 queued 任务数: {recovered}")
     
     yield
     
