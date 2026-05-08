@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import require_bearer_token
 from app.core.config import get_settings
 from app.core.enums import JobStatus
+from app.core.logging_utils import to_pretty_log
 from app.core.paths import ensure_dir
 from app.db.crud import get_job_by_id
 from app.db.session import get_db
@@ -35,23 +36,23 @@ async def publish_model(
     job = get_job_by_id(db, request.job_id)
     if not job:
         response = ModelPublishResponse(code=404, message="job_id not found", data=None)
-        logger.info("publish_model response: {}", response.model_dump())
+        logger.info("publish_model response:\n{}", to_pretty_log(response))
         return response
 
     if job.status != JobStatus.completed.value:
         response = ModelPublishResponse(code=500, message="job is not completed", data=None)
-        logger.info("publish_model response: {}", response.model_dump())
+        logger.info("publish_model response:\n{}", to_pretty_log(response))
         return response
 
     if not job.output_dir:
         response = ModelPublishResponse(code=500, message="model source directory is missing", data=None)
-        logger.info("publish_model response: {}", response.model_dump())
+        logger.info("publish_model response:\n{}", to_pretty_log(response))
         return response
 
     source_dir = Path(job.output_dir)
     if not source_dir.exists() or not source_dir.is_dir():
         response = ModelPublishResponse(code=500, message="model source directory is missing", data=None)
-        logger.info("publish_model response: {}", response.model_dump())
+        logger.info("publish_model response:\n{}", to_pretty_log(response))
         return response
 
     release_root = ensure_dir(settings.release_path_resolved)
@@ -69,7 +70,7 @@ async def publish_model(
         shutil.copytree(source_dir, publish_dir)
     except Exception:
         response = ModelPublishResponse(code=500, message="internal error", data=None)
-        logger.info("publish_model response: {}", response.model_dump())
+        logger.info("publish_model response:\n{}", to_pretty_log(response))
         return response
 
     response = ModelPublishResponse(
@@ -77,5 +78,5 @@ async def publish_model(
         message="success",
         data=ModelPublishData(model_path=str(publish_dir.resolve())),
     )
-    logger.info("publish_model response: {}", response.model_dump())
+    logger.info("publish_model response:\n{}", to_pretty_log(response))
     return response

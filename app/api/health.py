@@ -5,6 +5,7 @@
 from fastapi import APIRouter
 from loguru import logger
 
+from app.core.logging_utils import to_pretty_log
 from app.schemas.response import HealthCheckResponse
 
 router = APIRouter(tags=["health"])
@@ -19,5 +20,5 @@ async def health_check() -> HealthCheckResponse:
         包含状态 "ok" 的 HealthCheckResponse
     """
     response = HealthCheckResponse(status="ok")
-    logger.info("health_check response: {}", response.model_dump())
+    logger.info("health_check response:\n{}", to_pretty_log(response))
     return response

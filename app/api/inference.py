@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from loguru import logger
 
 from app.core.auth import require_bearer_token
+from app.core.logging_utils import to_pretty_log
 from app.schemas.request import ModelInferRequest
 from app.schemas.response import ModelInferData, ModelInferResponse
 from app.services.inference_service import InferenceError, run_inference
@@ -27,7 +28,7 @@ async def infer_model(
         )
     except InferenceError as exc:
         response = ModelInferResponse(code=exc.code, message=exc.message, data=None)
-        logger.info("infer_model response: {}", response.model_dump())
+        logger.info("infer_model response:\n{}", to_pretty_log(response))
         return response
 
     response = ModelInferResponse(
@@ -35,5 +36,5 @@ async def infer_model(
         message="success",
         data=ModelInferData(predictions=predictions),
     )
-    logger.info("infer_model response: {}", response.model_dump())
+    logger.info("infer_model response:\n{}", to_pretty_log(response))
     return response

@@ -7,6 +7,7 @@ from io import StringIO
 import pandas as pd
 from fastapi import APIRouter, HTTPException, status
 from loguru import logger
+from app.core.logging_utils import to_pretty_log
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 router = APIRouter(prefix="/v1/tools", tags=["tools"])
@@ -91,7 +92,10 @@ async def calculate_correlation(request: CorrelationRequest) -> CorrelationRespo
     try:
         dataframe = pd.read_csv(request.csv_path)
     except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError, UnicodeDecodeError) as exc:
-        logger.info("calculate_correlation response error: {}", f"无法读取或解析 CSV 文件: {exc}")
+        logger.info(
+            "calculate_correlation response error:\n{}",
+            to_pretty_log({"detail": f"无法读取或解析 CSV 文件: {exc}"}),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"无法读取或解析 CSV 文件: {exc}",
@@ -99,7 +103,10 @@ async def calculate_correlation(request: CorrelationRequest) -> CorrelationRespo
 
     missing_columns = [column for column in request.columns if column not in dataframe.columns]
     if missing_columns:
-        logger.info("calculate_correlation response error: {}", f"找不到列: {missing_columns}")
+        logger.info(
+            "calculate_correlation response error:\n{}",
+            to_pretty_log({"detail": f"找不到列: {missing_columns}"}),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"找不到列: {missing_columns}",
@@ -110,12 +117,15 @@ async def calculate_correlation(request: CorrelationRequest) -> CorrelationRespo
         correlation = numeric_data.corr(method=request.method)
         correlation_matrix: dict[str, dict[str, float | None]] = correlation.where(~correlation.isna(), None).to_dict()  # type: ignore[assignment]
     except ValueError as exc:
-        logger.info("calculate_correlation response error: {}", f"相关性计算失败: {exc}")
+        logger.info(
+            "calculate_correlation response error:\n{}",
+            to_pretty_log({"detail": f"相关性计算失败: {exc}"}),
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"相关性计算失败: {exc}",
         )
 
     response = CorrelationResponse(correlation_matrix=correlation_matrix)
-    logger.info("calculate_correlation response: {}", response.model_dump())
+    logger.info("calculate_correlation response:\n{}", to_pretty_log(response))
     return response

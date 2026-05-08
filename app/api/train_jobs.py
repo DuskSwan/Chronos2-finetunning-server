@@ -12,6 +12,7 @@ from app.core.auth import require_bearer_token
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.enums import JobStatus
+from app.core.logging_utils import to_pretty_log
 from app.core.paths import ensure_dir
 from app.db.crud import create_job
 from app.db.session import get_db
@@ -68,7 +69,7 @@ async def create_train_job(
             message="success",
             data=CreateTrainJobData(job_id=job_id),
         )
-        logger.info("create_train_job response: {}", response.model_dump())
+        logger.info("create_train_job response:\n{}", to_pretty_log(response))
         return response
     except Exception as exc:
         raise normalize_api_error(exc) from exc
@@ -85,7 +86,7 @@ async def get_train_job_status(
         detail = get_job_detail(db, job_id)
         data = adapt_job_detail(detail)
         response = ApiResponse(code=0, message="success", data=data)
-        logger.info("get_train_job_status response: {}", response.model_dump())
+        logger.info("get_train_job_status response:\n{}", to_pretty_log(response))
         return response
     except Exception as exc:
         normalized = normalize_api_error(exc)

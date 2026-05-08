@@ -15,6 +15,7 @@ from loguru import logger
 
 from app.core.config import get_settings
 from app.core.enums import JobStatus, FinetuneMode
+from app.core.logging_utils import to_pretty_log
 from app.core.paths import ensure_dir
 from app.db.crud import create_job, get_job_by_id
 from app.db.session import get_db
@@ -43,10 +44,22 @@ router = APIRouter(prefix="/v1/finetune", tags=["finetune"])
 
 
 def _log_response(endpoint: str, response: object) -> None:
-    if hasattr(response, "model_dump"):
-        logger.info("{} response: {}", endpoint, response.model_dump())
-        return
-    logger.info("{} response: {}", endpoint, str(response))
+    logger.info("{} response:\n{}", endpoint, to_pretty_log(response))
+
+
+def _log_job_detail_polling(job_id: str, response: JobDetailResponse) -> None:
+    payload = response.model_dump()
+    progress = payload.get("progress") or {}
+    logger.info(
+        "get_finetune_job_detail response: job_id={} status={} step={}/{} last_loss={} started_at={} finished_at={}",
+        job_id,
+        payload.get("status"),
+        progress.get("current_step"),
+        progress.get("max_steps"),
+        progress.get("last_loss"),
+        payload.get("started_at"),
+        payload.get("finished_at"),
+    )
 
 
 def validate_request(request: CreateFinetuneJobRequest) -> dict:
@@ -204,7 +217,7 @@ async def get_finetune_job_detail(
 ) -> JobDetailResponse:
     """查询任务详情。"""
     response = get_job_detail(db, job_id)
-    _log_response("get_finetune_job_detail", response)
+    _log_job_detail_polling(job_id, response)
     return response
 
 
