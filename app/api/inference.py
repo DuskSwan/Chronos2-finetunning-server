@@ -21,6 +21,7 @@ async def infer_model(
             model_path=request.model_path,
             cov_group=request.cov_group,
             prediction_length=request.prediction_length,
+            context_length=request.context_length,
             csv_path=request.csv_path,
         )
     except InferenceError as exc:

@@ -621,10 +621,10 @@ Base URL: `http://127.0.0.1:8011`
 Content-Type: `application/json`  
 时间字段: ISO 8601（UTC）  
 认证:
-- 旧接口（`/v1/finetune/*`, `/v1/tools/*`, `/health`）默认无认证
+- 原始接口（`/v1/finetune/*`, `/v1/tools/*`, `/health`）默认无认证
 - 兼容接口（`/api/v1/train_jobs*`, `/api/model/publish`, `/api/model/infer`）使用 Bearer Token（`API_BEARER_TOKEN` 非空时启用）
 
-### 旧接口（保持兼容）
+### 原始接口（保持兼容）
 
 #### GET /health
 
@@ -892,6 +892,7 @@ Content-Type: `application/json`
     }
   ],
   "prediction_length": 3,
+  "context_length": 64,
   "csv_path": "/abs/path/to/new_data.csv"
 }
 ```
@@ -903,6 +904,7 @@ Content-Type: `application/json`
 | `model_path` | str | 是 | 发布后的模型目录绝对路径 |
 | `cov_group` | list[object] | 是 | 推理分组列表，元素形如 `{"target":"...","covariates":["..."]}` |
 | `prediction_length` | int | 是 | 预测长度（正整数） |
+| `context_length` | int | 是 | 上下文长度（正整数） |
 | `csv_path` | str | 是 | 推理输入 CSV 路径 |
 
 成功响应 200:
@@ -962,6 +964,8 @@ Content-Type: `application/json`
 
 说明:
 - 推理时每个 `cov_group` 会按 `target` 选择对应子模型目录：`finetuned-ckpt_<target>`。
+- 每个 `target` 使用滚动窗口推理：每次取 `context_length` 行作为输入，预测接下来 `prediction_length` 个点，窗口按 `prediction_length` 前进。
+- 每个 `target` 的最终输出长度为 `n - context_length`（`n` 为 CSV 总行数）；最后一个窗口会按剩余长度裁剪。
 - 一次请求包含多个 `target` 时，会逐组推理并按 `cov_group` 顺序返回结果。
 
 ## 测试

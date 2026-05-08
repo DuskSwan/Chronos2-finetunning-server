@@ -121,6 +121,11 @@ def test_infer_model_success_multi_target(client: TestClient):
         return _FakePipeline([4.0, 5.0, 6.0])
 
     with patch("app.services.inference_service.load_local_model", side_effect=fake_loader):
+        row_count = len(csv_path.read_text(encoding="utf-8").strip().splitlines()) - 1
+        context_length = 4
+        expected_len = row_count - context_length
+        expected_a = ([1.0, 2.0, 3.0] * ((expected_len + 2) // 3))[:expected_len]
+        expected_b = ([4.0, 5.0, 6.0] * ((expected_len + 2) // 3))[:expected_len]
         response = client.post(
             "/api/model/infer",
             headers=_auth_header(),
@@ -131,6 +136,7 @@ def test_infer_model_success_multi_target(client: TestClient):
                     {"target": "value2", "covariates": ["value1", "value4"]},
                 ],
                 "prediction_length": 3,
+                "context_length": context_length,
                 "csv_path": str(csv_path.resolve()),
             },
         )
@@ -140,8 +146,8 @@ def test_infer_model_success_multi_target(client: TestClient):
     assert body["code"] == 0
     assert body["message"] == "success"
     assert body["data"]["predictions"] == [
-        {"target": "value1", "prediction": [1.0, 2.0, 3.0]},
-        {"target": "value2", "prediction": [4.0, 5.0, 6.0]},
+        {"target": "value1", "prediction": expected_a},
+        {"target": "value2", "prediction": expected_b},
     ]
 
 
@@ -159,6 +165,7 @@ def test_infer_model_missing_target_model(client: TestClient):
             "model_path": str(model_root.resolve()),
             "cov_group": [{"target": "value1", "covariates": ["value2"]}],
             "prediction_length": 3,
+            "context_length": 2,
             "csv_path": str(csv_path.resolve()),
         },
     )
@@ -180,6 +187,7 @@ def test_infer_model_path_not_found(client: TestClient):
             "model_path": str((repo_root / "release" / "missing_model_dir").resolve()),
             "cov_group": [{"target": "value1", "covariates": ["value2"]}],
             "prediction_length": 3,
+            "context_length": 2,
             "csv_path": str(csv_path.resolve()),
         },
     )
@@ -202,6 +210,7 @@ def test_infer_csv_path_not_found(client: TestClient):
             "model_path": str(model_root.resolve()),
             "cov_group": [{"target": "value1", "covariates": ["value2"]}],
             "prediction_length": 3,
+            "context_length": 2,
             "csv_path": str((repo_root / "not_exists.csv").resolve()),
         },
     )
@@ -226,6 +235,7 @@ def test_infer_history_length_insufficient(client: TestClient, temp_base_dir: Pa
             "model_path": str(model_root.resolve()),
             "cov_group": [{"target": "value1", "covariates": ["value2"]}],
             "prediction_length": 3,
+            "context_length": 1,
             "csv_path": str(csv_path.resolve()),
         },
     )
@@ -250,6 +260,7 @@ def test_infer_covariate_mismatch(client: TestClient, temp_base_dir: Path):
             "model_path": str(model_root.resolve()),
             "cov_group": [{"target": "value1", "covariates": ["missing_col"]}],
             "prediction_length": 3,
+            "context_length": 1,
             "csv_path": str(csv_path.resolve()),
         },
     )

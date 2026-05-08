@@ -249,6 +249,7 @@ class ModelInferRequest(BaseModel):
         description="预测分组列表，每组包含 target 与 covariates",
     )
     prediction_length: int = Field(description="预测步数")
+    context_length: int = Field(description="上下文长度")
     csv_path: str = Field(description="推理数据 CSV 文件路径")
 
     @field_validator("model_path", "csv_path")
@@ -263,6 +264,13 @@ class ModelInferRequest(BaseModel):
     def validate_prediction_length(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("prediction_length must be a positive integer")
+        return v
+
+    @field_validator("context_length")
+    @classmethod
+    def validate_context_length(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("context_length must be a positive integer")
         return v
 
     @field_validator("cov_group")

@@ -44,6 +44,7 @@ def run_inference(
     model_path: str,
     cov_group: list[InferCovGroup],
     prediction_length: int,
+    context_length: int,
     csv_path: str,
 ) -> list[InferPredictionItem]:
     """执行推理并返回按 cov_group 顺序的预测结果。"""
@@ -66,7 +67,8 @@ def run_inference(
     except Exception as exc:
         raise InferenceError(400, f"invalid csv data: {exc}") from exc
 
-    if df.shape[0] < 2:
+    history_length = df.shape[0]
+    if history_length <= context_length:
         raise InferenceError(400, "history length is insufficient")
 
     predictions: list[InferPredictionItem] = []
@@ -74,30 +76,50 @@ def run_inference(
         target = group.target
         model_dir = _resolve_target_model_dir(release_model_dir, target)
 
-        input_dict: dict[str, Any] = {
-            "target": df[target].to_numpy(copy=True),
+        target_values = df[target].to_numpy(copy=True)
+        cov_values = {
+            col: df[col].to_numpy(copy=True) for col in group.covariates
         }
-        if group.covariates:
-            input_dict["past_covariates"] = {
-                col: df[col].to_numpy(copy=True) for col in group.covariates
-            }
+        expected_pred_len = history_length - context_length
+        merged_prediction: list[float] = []
 
         try:
             pipeline = load_local_model(model_dir, device="cpu")
-            raw_outputs = pipeline.predict(
-                inputs=[input_dict],
-                prediction_length=prediction_length,
-            )
+            start_idx = 0
+            while len(merged_prediction) < expected_pred_len:
+                end_idx = start_idx + context_length
+                input_dict: dict[str, Any] = {
+                    "target": target_values[start_idx:end_idx],
+                }
+                if cov_values:
+                    input_dict["past_covariates"] = {
+                        col: values[start_idx:end_idx]
+                        for col, values in cov_values.items()
+                    }
+
+                raw_outputs = pipeline.predict(
+                    inputs=[input_dict],
+                    prediction_length=prediction_length,
+                )
+                if not raw_outputs:
+                    raise InferenceError(500, f"empty prediction for target '{target}'")
+
+                chunk_prediction = _to_float_list(raw_outputs[0])
+                if not chunk_prediction:
+                    raise InferenceError(500, f"empty prediction for target '{target}'")
+
+                remaining = expected_pred_len - len(merged_prediction)
+                merged_prediction.extend(chunk_prediction[:remaining])
+                start_idx += prediction_length
+        except InferenceError:
+            raise
         except Exception as exc:
             raise InferenceError(500, f"inference failed for target '{target}'") from exc
-
-        if not raw_outputs:
-            raise InferenceError(500, f"empty prediction for target '{target}'")
 
         predictions.append(
             InferPredictionItem(
                 target=target,
-                prediction=_to_float_list(raw_outputs[0]),
+                prediction=merged_prediction,
             )
         )
 

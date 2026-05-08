@@ -91,6 +91,7 @@ def _infer_model(model_path: str) -> dict:
         "model_path": model_path,
         "cov_group": SELECTED_GROUPS,
         "prediction_length": 8,
+        "context_length": 32,
         "csv_path": str(DATA_FILE),
     }
     print("\n[5] Infer with Published Model")

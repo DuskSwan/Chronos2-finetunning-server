@@ -75,6 +75,7 @@ def test_run_inference_model_path_not_found(tmp_path: Path):
             model_path=str(tmp_path / "no_model"),
             cov_group=group,
             prediction_length=2,
+            context_length=2,
             csv_path=str(csv_path),
         )
     assert exc.value.code == 404
@@ -91,6 +92,7 @@ def test_run_inference_csv_not_found(tmp_path: Path):
             model_path=str(model_root),
             cov_group=group,
             prediction_length=2,
+            context_length=2,
             csv_path=str(tmp_path / "no.csv"),
         )
     assert exc.value.code == 404
@@ -109,6 +111,7 @@ def test_run_inference_history_too_short(tmp_path: Path):
             model_path=str(model_root),
             cov_group=group,
             prediction_length=2,
+            context_length=2,
             csv_path=str(csv_path),
         )
     assert exc.value.code == 400
@@ -127,9 +130,10 @@ def test_run_inference_success_with_mock_pipeline(tmp_path: Path):
             model_path=str(model_root),
             cov_group=group,
             prediction_length=2,
+            context_length=2,
             csv_path=str(csv_path),
         )
 
     assert len(result) == 1
     assert result[0].target == "value1"
-    assert result[0].prediction == [0.1, 0.2]
+    assert result[0].prediction == [0.1]
