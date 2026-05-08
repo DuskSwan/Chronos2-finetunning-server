@@ -120,6 +120,7 @@ def run_inference(
             InferPredictionItem(
                 target=target,
                 prediction=merged_prediction,
+                actual=target_values[context_length:].astype(float).tolist(),
             )
         )
 

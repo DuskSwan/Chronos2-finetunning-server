@@ -137,3 +137,4 @@ def test_run_inference_success_with_mock_pipeline(tmp_path: Path):
     assert len(result) == 1
     assert result[0].target == "value1"
     assert result[0].prediction == [0.1]
+    assert result[0].actual == [5.0]

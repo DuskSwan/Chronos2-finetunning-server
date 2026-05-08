@@ -127,6 +127,7 @@ class InferPredictionItem(BaseModel):
 
     target: str = Field(description="目标列名")
     prediction: list[float] = Field(description="预测值列表")
+    actual: list[float] = Field(description="真实值列表，长度与 prediction 相同")
 
 
 class ModelInferData(BaseModel):

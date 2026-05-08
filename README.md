@@ -917,11 +917,13 @@ Content-Type: `application/json`
     "predictions": [
       {
         "target": "value1",
-        "prediction": [0.1, 0.2, 0.3]
+        "prediction": [0.1, 0.2, 0.3],
+        "actual": [10.1, 10.4, 10.9]
       },
       {
         "target": "value2",
-        "prediction": [0.4, 0.5, 0.6]
+        "prediction": [0.4, 0.5, 0.6],
+        "actual": [20.2, 20.5, 20.8]
       }
     ]
   }
@@ -966,6 +968,8 @@ Content-Type: `application/json`
 - 推理时每个 `cov_group` 会按 `target` 选择对应子模型目录：`finetuned-ckpt_<target>`。
 - 每个 `target` 使用滚动窗口推理：每次取 `context_length` 行作为输入，预测接下来 `prediction_length` 个点，窗口按 `prediction_length` 前进。
 - 每个 `target` 的最终输出长度为 `n - context_length`（`n` 为 CSV 总行数）；最后一个窗口会按剩余长度裁剪。
+- 每个 `target` 的返回项包含 `prediction`（预测序列）和 `actual`（对应真实序列）。
+- `prediction` 与 `actual` 的长度都为 `n - context_length`。
 - 一次请求包含多个 `target` 时，会逐组推理并按 `cov_group` 顺序返回结果。
 
 ## 测试

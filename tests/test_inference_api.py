@@ -126,6 +126,12 @@ def test_infer_model_success_multi_target(client: TestClient):
         expected_len = row_count - context_length
         expected_a = ([1.0, 2.0, 3.0] * ((expected_len + 2) // 3))[:expected_len]
         expected_b = ([4.0, 5.0, 6.0] * ((expected_len + 2) // 3))[:expected_len]
+        rows = csv_path.read_text(encoding="utf-8").strip().splitlines()
+        header = rows[0].split(",")
+        value1_idx = header.index("value1")
+        value2_idx = header.index("value2")
+        actual_a = [float(r.split(",")[value1_idx]) for r in rows[1 + context_length:]]
+        actual_b = [float(r.split(",")[value2_idx]) for r in rows[1 + context_length:]]
         response = client.post(
             "/api/model/infer",
             headers=_auth_header(),
@@ -146,8 +152,8 @@ def test_infer_model_success_multi_target(client: TestClient):
     assert body["code"] == 0
     assert body["message"] == "success"
     assert body["data"]["predictions"] == [
-        {"target": "value1", "prediction": expected_a},
-        {"target": "value2", "prediction": expected_b},
+        {"target": "value1", "prediction": expected_a, "actual": actual_a},
+        {"target": "value2", "prediction": expected_b, "actual": actual_b},
     ]
 
 
