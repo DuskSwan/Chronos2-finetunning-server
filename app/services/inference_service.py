@@ -75,6 +75,7 @@ def run_inference(
     prediction_length: int | None,
     context_length: int | None,
     csv_path: str,
+    target_filter: list[str] | None = None,
 ) -> list[InferPredictionItem]:
     """执行推理并返回按 cov_group 顺序的预测结果。"""
     release_model_dir = Path(model_path)
@@ -97,6 +98,19 @@ def run_inference(
         final_cov_group, metadata_model_dir_map = _to_infer_groups(metadata.get("selected_groups") or [])
     if final_cov_group is None:
         raise InferenceError(400, "cov_group is required when metadata.json is missing")
+    if target_filter is not None:
+        target_set = set(target_filter)
+        filtered_cov_group = [group for group in final_cov_group if group.target in target_set]
+        if len(filtered_cov_group) != len(target_filter):
+            existing = {group.target for group in final_cov_group}
+            missing = [target for target in target_filter if target not in existing]
+            raise InferenceError(400, f"targets not found in inference groups: {','.join(missing)}")
+        final_cov_group = filtered_cov_group
+        metadata_model_dir_map = {
+            target: model_dir
+            for target, model_dir in metadata_model_dir_map.items()
+            if target in target_set
+        }
 
     final_prediction_length = prediction_length
     if final_prediction_length is None and metadata is not None:
