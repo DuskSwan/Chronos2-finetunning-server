@@ -32,6 +32,8 @@ release/
 
 # offline infer / packaging temp artifacts
 chronos_infer.spec
+chronos_infer_node.spec
 tmp_cli_real/
 tmp_cli_real_run/
 tmp_cli_smoke/
+tmp_zmq_smoke/

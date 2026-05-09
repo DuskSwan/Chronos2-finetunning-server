@@ -1230,3 +1230,99 @@ edge_package/
 ```
 
 说明：程序不内置模型和数据，均通过命令行路径传入。
+
+## ExternalNode 集成模式（ZMQ REQ）
+
+本项目提供面向 ExternalNode 的长驻推理进程入口：`app.cli.infer_node_cli`。
+
+### 1) 启动参数
+
+```bash
+python -m app.cli.infer_node_cli \
+  --model-path /abs/path/to/model_release_dir \
+  --zmq-endpoint tcp://127.0.0.1:52345 \
+  --zmq-protocol REQ
+```
+
+说明：
+
+- `--model-path`：必填，模型目录路径（必须包含 `metadata.json`）
+- `--zmq-endpoint`：必填，ExternalNode 分配端点
+- `--zmq-protocol`：必填，当前仅支持 `REQ`
+- `DEALER` 当前不支持，会直接退出非 0
+
+### 2) 通信模式
+
+- ExternalNode `REQ` <-> 本程序 `REP`
+- 一问一答：每条输入返回一条 JSON
+
+### 3) 输入格式
+
+输入为 JSON 字符串，反序列化后必须是 `list[dict]`：
+
+```json
+[
+  {"timestamp": "2026-05-09 10:00:00", "value1": 1.1, "value2": 2.2},
+  {"timestamp": "2026-05-09 10:00:01", "value1": 1.2, "value2": 2.3}
+]
+```
+
+列处理规则：
+
+- 仅使用模型所需列
+- 多余列忽略
+- 缺列直接报错
+
+### 4) 输出格式
+
+成功示例：
+
+```json
+{
+  "code": 200,
+  "type": "timeseries",
+  "version": "1.0",
+  "data": {
+    "value1": [0.1, 0.2],
+    "value2": [0.3, 0.4]
+  },
+  "message": "success"
+}
+```
+
+失败示例：
+
+```json
+{
+  "code": 400,
+  "type": "timeseries",
+  "version": "1.0",
+  "data": {},
+  "message": "missing column which model required: value2"
+}
+```
+
+### 5) 节点版二进制打包
+
+Windows：
+
+```powershell
+.\scripts\build_infer_node.ps1
+```
+
+Linux：
+
+```bash
+chmod +x ./scripts/build_infer_node.sh
+./scripts/build_infer_node.sh
+```
+
+产物：
+
+```text
+dist/
+└── chronos_infer_node/
+    ├── chronos_infer_node.exe (Windows)
+    ├── chronos_infer_node (Linux)
+    └── ...runtime files...
+```
