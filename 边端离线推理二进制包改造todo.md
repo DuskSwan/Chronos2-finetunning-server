@@ -1,218 +1,308 @@
-# 边端离线推理二进制包改造 TODO（优化版）
+# ExternalNode 集成型二进制推理改造 TODO（确认版）
 
-## 1. 现状结论（基于当前代码）
+## 0. 已确认约束（本项目最终口径）
 
-当前项目已经具备离线 CLI 改造的关键基础：
+以下约束已由需求方确认，后续实现不再反复讨论：
 
-- 已有公共推理服务：`app/services/inference_service.py::run_inference(...)`
-- 该服务已不依赖 FastAPI Request/Response，可被 API 与 CLI 共同复用
-- 已支持从 `<model_path>/metadata.json` 自动补齐：
-  - `selected_groups`
-  - `prediction_length`
-  - `context_length`
-- 已支持子模型目录解析：优先 `model_dir`，回退 `finetuned-ckpt_<target>`
-- 已有较完整的推理接口兼容测试：`tests/test_inference_api.py`
-
-因此，本次重点不应再放在“抽离推理逻辑”，而应聚焦：
-
-1. 新增 CLI 入口与参数规范
-2. 输出文件与退出码规范
-3. 打包可运行性（PyInstaller onedir）
-4. 离线交付文档与验收
-
----
-
-## 2. 目标重述（收敛版）
-
-目标：提供一个可离线部署的推理可执行程序（优先 `chronos_infer`），通过命令行输入模型与数据路径完成推理。
-
-必须满足：
-
-- 不启动 FastAPI 服务也可运行
-- 不内置模型权重和业务数据
-- 默认复用 metadata 自动配置
-- 成功输出结构化 JSON 文件
-- 用退出码表达成功/失败
-- 可被 PyInstaller `onedir` 方式打包
+1. `--model-path` 在本项目中是必填参数（尽管通用规范写可选）。
+2. 运行时有效业务输入只有：模型路径 + 上游发送的数据表（`list[dict]`）。
+3. `prediction_length/context_length/cov_group` 不再由请求传入，全部依赖 `metadata.json`。
+4. 返回 `data` 结构固定为：`{target: prediction}`。
+   - 不返回 `actual`
+   - 不返回 `metadata`
+   - 不返回 `request_id`
+5. 输入列处理规则：
+   - 多余列忽略
+   - 仅提取模型需要列并进行数值处理
+   - 缺失必需列直接报错
+6. 节点模式下 `metadata.json` 必须存在，缺失即失败。
+7. 仅支持 REQ 一问一答模式；不考虑并发。
+8. 进程生命周期由外部工具管理；本程序不承担会话关闭协商。
 
 ---
 
-## 3. 与现有 TODO 的差异与优化点
+## 1. 背景与目标
 
-### 3.1 删除/降级的项
+当前目标已变更：
 
-- “抽离公共推理服务”不再作为主任务（已完成）
-- “保证 `/api/model/infer` 不被破坏”改为回归项，不作为主实现项
-- “CLI 输出尽量与 HTTP 完全一致”改为“结构相近 + CLI 语义清晰”
-  - 建议保留 `code/message/data`，便于统一消费
+- 不再交付“边端独立 CLI 批处理程序”；
+- 改为交付“可被 ExternalNode 拉起并通过 ZMQ 通信的推理进程”。
 
-### 3.2 需要新增的关键项
+该二进制程序启动后需要：
 
-- 明确 CLI 参数与 `run_inference` 参数映射
-- 增加 `--targets` 的语义定义（从 metadata/cov_group 里筛选，不是新增推理组）
-- 明确路径创建策略：`--output-path` 父目录自动创建
-- 明确错误边界：业务错误（4xx语义）vs 内部错误（5xx语义）
-- 增加“最小打包验证脚本”和“干净环境冒烟验证步骤”
+1. 解析参数 `--model-path --zmq-endpoint --zmq-protocol`
+2. 在指定 endpoint 绑定 ZMQ 服务端 socket
+3. 接收上游每次发送的一条 JSON 字符串（内容为“字典列表”，等价多行 CSV）
+4. 执行一次推理（每个 target 产出预测）
+5. 按约定 JSON 结构返回结果
+
+首版范围：
+
+- 只支持 `REQ` 协议（服务端 `REP`）
+- 明确不支持 `DEALER`（服务端 `ROUTER`）
 
 ---
 
-## 4. CLI 设计（按当前项目可直接实现）
+## 2. 外部协议约束（来自二进制节点规范）
 
-### 4.1 命令示例
+### 2.1 启动参数
 
-```bash
-chronos_infer \
-  --model-path ./models/train_job_001 \
-  --csv-path ./data/input.csv \
-  --output-path ./result/output.json
-```
+平台会传入：
 
-### 4.2 参数定义
+- `--model-path <abs_path>`
+- `--zmq-endpoint <endpoint>`
+- `--zmq-protocol <REQ|DEALER>`
 
-必填参数：
+本项目要求：
 
-- `--model-path`：发布模型目录
-- `--csv-path`：输入 CSV 路径
-- `--output-path`：输出 JSON 文件路径
+- `--model-path` 必填
+- `--zmq-endpoint` 必填
+- `--zmq-protocol` 必填
+- 不应自行发明替代参数名
 
-可选参数：
+### 2.2 输入消息（单条）
 
-- `--prediction-length`：覆盖 metadata 默认值
-- `--context-length`：覆盖 metadata 默认值
-- `--targets`：逗号分隔，仅推理指定 target（如 `value1,value2`）
-- `--verbose`：输出调试日志（含异常堆栈）
-- `--version`：输出版本
+- 类型：JSON 字符串
+- 内容：`list[dict]`，每个 dict 表示一行记录
+- 示例：`[{"timestamp":"...","value":12.3}, {...}]`
 
-暂不建议首版支持：
+### 2.3 输出消息（REQ 模式）
 
-- `--device`（当前 `run_inference` 内部固定 `cpu`）
-- `--format csv`（先统一 JSON，后续扩展）
+每条输入对应一条输出。
 
-### 4.3 输出与退出码
-
-输出 JSON 建议：
+成功响应格式：
 
 ```json
 {
-  "code": 0,
-  "message": "success",
+  "code": 200,
+  "type": "timeseries",
+  "version": "1.0",
   "data": {
-    "model_path": "...",
-    "csv_path": "...",
-    "predictions": []
-  }
+    "value1": [0.1, 0.2],
+    "value2": [0.3, 0.4]
+  },
+  "message": "success"
 }
 ```
 
-退出码：
+失败响应格式：
 
-- `0`：成功
-- `2`：参数错误
-- `3`：文件/路径错误
-- `4`：推理业务错误（如列缺失、历史长度不足）
-- `1`：其他未预期错误
-
----
-
-## 5. 实施清单（更新后）
-
-### 5.1 新增 CLI 入口（P0）
-
-- [ ] 新增文件：`app/cli/infer_cli.py`
-- [ ] 使用 `argparse` 解析参数
-- [ ] 调用 `run_inference(...)`
-- [ ] 将结果写入 `--output-path`
-- [ ] 返回规范退出码
-
-### 5.2 适配 metadata 与 targets 过滤（P0）
-
-- [ ] 当未显式传 `cov_group` 时，复用 `run_inference` 现有 metadata 补齐能力
-- [ ] 实现 `--targets` 过滤：
-  - [ ] 若 metadata/请求组中不含指定 target，报错
-  - [ ] 保持原有组内 covariates 不变
-
-### 5.3 错误与日志（P0）
-
-- [ ] 捕获 `InferenceError`，输出用户可读错误
-- [ ] `--verbose` 下打印 traceback
-- [ ] 默认模式不打印长堆栈
-
-### 5.4 打包支持（P1）
-
-- [ ] 新增 `scripts/build_infer_exe.ps1`（PyInstaller onedir）
-- [ ] 在 README 给出打包命令、产物目录、运行示例
-- [ ] 验证在未启动 API 服务时可执行推理
-
-### 5.5 测试（P1）
-
-- [ ] 新增 `tests/test_infer_cli.py`
-- [ ] 覆盖最小成功路径
-- [ ] 覆盖 metadata 缺失+参数不足失败
-- [ ] 覆盖 `--targets` 过滤
-- [ ] 覆盖输出文件生成与退出码
-
----
-
-## 6. 建议目录结构
-
-```text
-app/
-├── cli/
-│   └── infer_cli.py
-├── services/
-│   └── inference_service.py
-scripts/
-└── build_infer_exe.ps1
-tests/
-└── test_infer_cli.py
+```json
+{
+  "code": 400,
+  "type": "timeseries",
+  "version": "1.0",
+  "data": {},
+  "message": "...error..."
+}
 ```
 
 ---
 
-## 7. README 必加内容
+## 3. 与当前实现的差异
 
-- CLI 用途与适用场景（离线、边端、批处理）
-- 最小运行命令
-- 参数说明与优先级（显式参数 > metadata）
-- 输出 JSON 示例
-- 常见错误与排查
-- 打包步骤（PyInstaller onedir）
-- 离线交付目录示例
+当前已有：
 
----
+- `run_inference(...)`：基于 `model_path + csv_path` 推理
+- CLI：基于文件输入输出（`--csv-path --output-path`）
 
-## 8. 风险与规避
+本次需要新增：
 
-- 依赖体积大（Torch/Transformers）
-  - 规避：首版仅 `onedir`，不追求单文件
-- 不同机器 CUDA/驱动差异
-  - 规避：首版默认 CPU 推理
-- 模型目录结构不一致
-  - 规避：继续沿用 `model_dir` 优先 + 旧命名回退
+- ZMQ 服务循环
+- 将 `list[dict]` 输入转换为 DataFrame（不依赖 CSV 文件）
+- 以 ExternalNode 约定 JSON 直接回包，而不是落盘文件
+- 强制 metadata 存在并参与配置补齐
+
+因此需要抽象：
+
+- 新增“DataFrame 直接推理”的公共入口，供 ZMQ 服务复用
 
 ---
 
-## 9. 验收标准（可执行）
+## 4. 总体设计
 
-- [ ] `python -m app.cli.infer_cli --model-path ... --csv-path ... --output-path ...` 可运行成功
-- [ ] 不启动 FastAPI 也可推理
-- [ ] `dist/chronos_infer/` 可在目标机离线运行（提供模型与 CSV）
-- [ ] 输出 JSON 包含 `code/message/data.predictions`
-- [ ] 失败时退出码非 `0` 且错误可读
-- [ ] 原 `tests/test_inference_api.py` 保持通过
+### 4.1 模块结构建议
+
+```text
+app/
+├── services/
+│   ├── inference_service.py          # 现有核心推理
+│   └── inference_runtime_service.py  # 新增：DataFrame 入参推理适配
+├── runtime/
+│   └── zmq_infer_server.py           # 新增：ZMQ 服务主循环
+└── cli/
+    └── infer_node_cli.py             # 新增：二进制入口
+```
+
+### 4.2 调用链
+
+```text
+ExternalNode 启动进程
+  -> infer_node_cli 解析参数
+  -> 初始化 ZMQ (REQ -> REP)
+  -> 收包(JSON list[dict])
+  -> 反序列化 + DataFrame 校验
+  -> 调用公共推理服务
+  -> 回包(JSON)
+```
 
 ---
 
-## 10. 推荐执行顺序（按性价比）
+## 5. 参数与运行规则
 
-1. [ ] 实现 CLI 入口（先 Python 直跑）
-2. [ ] 补齐 CLI 测试（成功/失败/targets）
-3. [ ] 增加打包脚本并本机验证 `onedir`
-4. [ ] 更新 README 与交付示例目录
-5. [ ] 做一次“干净环境”冒烟验证
+### 5.1 必需参数
+
+- `--model-path`
+- `--zmq-endpoint`
+- `--zmq-protocol`
+
+### 5.2 协议限制
+
+- `--zmq-protocol=REQ`：正常启动（绑定 `REP`）
+- `--zmq-protocol=DEALER`：直接失败退出，并提示“当前版本不支持 DEALER”
+
+### 5.3 metadata 规则
+
+- `<model_path>/metadata.json` 必须存在
+- 不允许通过请求额外传入 `prediction_length/context_length/cov_group`
+- 推理所需配置全部从 metadata 获取
 
 ---
 
-## 11. 结论
+## 6. 消息处理规则
 
-你原始 todo 的总体方向是正确的；主要问题是“把已完成项当成主改造项”。优化后应把重心转移到 CLI、退出码、打包验证和离线交付文档，这样能最快落地边端可用版本。
+### 6.1 入站校验
+
+- JSON 反序列化失败 -> `code=400`
+- 顶层不是 list -> `code=400`
+- list 元素不是 dict -> `code=400`
+- 空 list -> `code=400`
+
+### 6.2 数据映射
+
+- `list[dict]` -> `pandas.DataFrame`
+- 输入可能包含额外列：允许并忽略
+- 仅按模型需求列参与推理
+- 缺少必需列：直接失败并回包错误
+- 必需列非数值：直接失败并回包错误
+
+### 6.3 出站格式
+
+成功：
+
+- `code=200`
+- `data` 固定为 `{target: prediction_list}`
+
+失败：
+
+- `code` 依据错误类型返回（建议 400/404/500）
+- `data={}`
+- `message` 提供可读原因
+
+---
+
+## 7. 实施清单
+
+### 7.1 推理服务改造（P0）
+
+- [ ] 在 `inference_service` 基础上新增 DataFrame 入参推理能力
+- [ ] 提供统一内部函数，避免 CSV 与 DataFrame 两套逻辑分叉
+- [ ] 强制 metadata 必须存在（节点模式）
+- [ ] 输出结构适配 `{target: prediction}`
+- [ ] 保持现有 `/api/model/infer` 与已有测试兼容
+
+### 7.2 ZMQ 运行时（P0）
+
+- [ ] 新增 `runtime/zmq_infer_server.py`
+- [ ] 实现 REQ 模式服务端（REP bind）
+- [ ] 实现单请求单响应循环
+- [ ] 实现优雅错误回包（不因单条坏消息崩进程）
+
+### 7.3 节点入口（P0）
+
+- [ ] 新增 `cli/infer_node_cli.py`
+- [ ] 解析 `--model-path --zmq-endpoint --zmq-protocol`
+- [ ] `DEALER` 直接拒绝并退出非 0
+- [ ] 启动 ZMQ 服务主循环
+
+### 7.4 打包脚本（P1）
+
+- [ ] 新增/调整打包脚本，入口切到 `app/cli/infer_node_cli.py`
+- [ ] Windows onedir：`chronos_infer_node.exe`
+- [ ] Linux onedir：`chronos_infer_node`
+
+### 7.5 文档（P1）
+
+- [ ] README 增加“ExternalNode 集成模式”章节
+- [ ] 给出 REQ 启动示例
+- [ ] 给出请求/响应 JSON 示例
+- [ ] 明确声明：当前不支持 DEALER
+- [ ] 明确声明：metadata 必须存在
+
+### 7.6 测试（P1）
+
+- [ ] 新增 `tests/test_zmq_infer_node.py`
+- [ ] 覆盖 REQ 正常收发
+- [ ] 覆盖非法 JSON
+- [ ] 覆盖空 list
+- [ ] 覆盖列缺失/类型错误
+- [ ] 覆盖 metadata 缺失
+- [ ] 覆盖 `--zmq-protocol=DEALER` 启动失败
+
+---
+
+## 8. 错误码与兼容建议
+
+建议回包 code：
+
+- `200`：成功
+- `400`：输入数据错误/参数错误
+- `404`：模型路径或子模型不存在
+- `500`：内部推理错误
+
+建议 message：
+
+- 面向节点集成日志可读
+- 不默认暴露完整 Python traceback
+
+---
+
+## 9. 验收标准
+
+- [ ] 可执行程序可被 ExternalNode 参数拉起
+- [ ] `REQ` 模式下可稳定一问一答
+- [ ] 输入 `list[dict]` 可完成推理并返回 `{target: prediction}`
+- [ ] 错误请求不会导致进程退出
+- [ ] metadata 缺失时明确报错
+- [ ] `DEALER` 明确返回“不支持”并退出非 0
+- [ ] 保持现有 API 推理能力与测试通过
+
+---
+
+## 10. 推荐执行顺序
+
+1. [ ] 抽象 DataFrame 推理入口（先不动 ZMQ）
+2. [ ] 实现 metadata 强制存在的节点模式校验
+3. [ ] 实现 ZMQ REQ/REP 服务循环
+4. [ ] 新增节点 CLI 入口并联调
+5. [ ] 增加自动化测试
+6. [ ] 更新打包脚本（Win/Linux）与 README
+7. [ ] 做一次本机 REQ 集成冒烟验证
+
+---
+
+## 11. 非目标（当前阶段不做）
+
+- [ ] DEALER/ROUTER 多帧会话
+- [ ] 一请求多响应流式输出
+- [ ] GPU 设备切换参数化
+- [ ] 动态热加载模型
+- [ ] 复杂鉴权/加密通信
+- [ ] 进程关闭协商（交由外部工具直接终止）
+
+---
+
+## 12. 结论
+
+新方案的核心是“从文件型 CLI”转向“长驻 ZMQ 节点进程”。
+首版先把 REQ 一问一答模式做稳定，确保可与 ExternalNode 完成端到端集成；DEALER 明确暂不支持并给出可读错误即可。
