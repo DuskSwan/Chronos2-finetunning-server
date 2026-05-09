@@ -245,11 +245,12 @@ class ModelInferRequest(BaseModel):
     """模型推理接口请求。"""
 
     model_path: str = Field(description="发布后的模型绝对路径")
-    cov_group: list[InferCovGroup] = Field(
-        description="预测分组列表，每组包含 target 与 covariates",
+    cov_group: Optional[list[InferCovGroup]] = Field(
+        default=None,
+        description="预测分组列表，每组包含 target 与 covariates；可选，默认取 metadata",
     )
-    prediction_length: int = Field(description="预测步数")
-    context_length: int = Field(description="上下文长度")
+    prediction_length: Optional[int] = Field(default=None, description="预测步数；可选，默认取 metadata")
+    context_length: Optional[int] = Field(default=None, description="上下文长度；可选，默认取 metadata")
     csv_path: str = Field(description="推理数据 CSV 文件路径")
 
     @field_validator("model_path", "csv_path")
@@ -261,21 +262,27 @@ class ModelInferRequest(BaseModel):
 
     @field_validator("prediction_length")
     @classmethod
-    def validate_prediction_length(cls, v: int) -> int:
+    def validate_prediction_length(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return v
         if v <= 0:
             raise ValueError("prediction_length must be a positive integer")
         return v
 
     @field_validator("context_length")
     @classmethod
-    def validate_context_length(cls, v: int) -> int:
+    def validate_context_length(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return v
         if v <= 0:
             raise ValueError("context_length must be a positive integer")
         return v
 
     @field_validator("cov_group")
     @classmethod
-    def validate_cov_group(cls, v: list[InferCovGroup]) -> list[InferCovGroup]:
+    def validate_cov_group(cls, v: Optional[list[InferCovGroup]]) -> Optional[list[InferCovGroup]]:
+        if v is None:
+            return v
         if not v:
             raise ValueError("cov_group cannot be empty")
         targets = [item.target for item in v]

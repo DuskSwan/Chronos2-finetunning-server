@@ -142,3 +142,21 @@ class ModelInferResponse(BaseModel):
     code: int = Field(description="业务状态码")
     message: str = Field(description="结果描述")
     data: ModelInferData | None = Field(description="响应数据")
+
+
+class ModelInfoData(BaseModel):
+    """模型信息接口 data。"""
+
+    model_path: str = Field(description="模型目录绝对路径")
+    targets: list[str] = Field(description="可预测目标列表")
+    selected_groups: list[dict[str, Any]] = Field(description="训练分组")
+    prediction_length: int = Field(description="默认预测长度")
+    context_length: int = Field(description="默认上下文长度")
+
+
+class ModelInfoResponse(BaseModel):
+    """模型信息接口响应。"""
+
+    code: int = Field(description="业务状态码")
+    message: str = Field(description="结果描述")
+    data: ModelInfoData | None = Field(description="响应数据")

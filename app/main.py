@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import health, finetune, tools, train_jobs, model_publish, inference
+from app.api import health, finetune, tools, train_jobs, model_publish, inference, model_info
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.paths import ensure_dir
@@ -36,6 +36,9 @@ def _is_model_publish_route(request: Request) -> bool:
 def _is_model_infer_route(request: Request) -> bool:
     return request.url.path == "/api/model/infer"
 
+def _is_model_info_route(request: Request) -> bool:
+    return request.url.path == "/api/model/info"
+
 
 def register_spec_exception_handlers(app: FastAPI) -> None:
     """为规范兼容路由注册异常处理。"""
@@ -54,7 +57,7 @@ def register_spec_exception_handlers(app: FastAPI) -> None:
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        if _is_model_publish_route(request) or _is_model_infer_route(request):
+        if _is_model_publish_route(request) or _is_model_infer_route(request) or _is_model_info_route(request):
             first = exc.errors()[0] if exc.errors() else {}
             msg = first.get("msg", "invalid parameter")
             return JSONResponse(
@@ -157,6 +160,7 @@ def create_app() -> FastAPI:
     app.include_router(train_jobs.router)
     app.include_router(model_publish.router)
     app.include_router(inference.router)
+    app.include_router(model_info.router)
     
     return app
 

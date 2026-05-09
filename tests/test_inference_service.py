@@ -43,14 +43,16 @@ def test_resolve_target_model_dir_success(tmp_path: Path):
     release_dir = tmp_path / "release"
     target_dir = release_dir / "finetuned-ckpt_value1"
     target_dir.mkdir(parents=True)
+    group = InferCovGroup(target="value1", covariates=[])
 
-    resolved = _resolve_target_model_dir(release_dir, "value1")
+    resolved = _resolve_target_model_dir(release_dir, group)
     assert resolved == target_dir
 
 
 def test_resolve_target_model_dir_not_found(tmp_path: Path):
+    group = InferCovGroup(target="missing", covariates=[])
     with pytest.raises(InferenceError) as exc:
-        _resolve_target_model_dir(tmp_path, "missing")
+        _resolve_target_model_dir(tmp_path, group)
     assert exc.value.code == 404
     assert exc.value.message == "model for target 'missing' not found"
 
@@ -138,3 +140,29 @@ def test_run_inference_success_with_mock_pipeline(tmp_path: Path):
     assert result[0].target == "value1"
     assert result[0].prediction == [0.1]
     assert result[0].actual == [5.0]
+
+
+def test_run_inference_use_metadata_when_request_omitted(tmp_path: Path):
+    model_root = tmp_path / "release"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True)
+    (model_root / "metadata.json").write_text(
+        (
+            '{"selected_groups":[{"target":"value1","covariates":["value2"]}],'
+            '"prediction_length":2,"context_length":2}'
+        ),
+        encoding="utf-8",
+    )
+    csv_path = tmp_path / "ok.csv"
+    csv_path.write_text("value1,value2\n1,2\n3,4\n5,6\n", encoding="utf-8")
+
+    with patch("app.services.inference_service.load_local_model", return_value=_FakePipeline([0.1, 0.2])):
+        result = run_inference(
+            model_path=str(model_root),
+            cov_group=None,
+            prediction_length=None,
+            context_length=None,
+            csv_path=str(csv_path),
+        )
+
+    assert len(result) == 1
+    assert result[0].target == "value1"

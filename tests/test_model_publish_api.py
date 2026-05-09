@@ -116,6 +116,12 @@ def test_publish_model_success(client: TestClient, test_db_session, temp_base_di
     ).resolve()
     assert body["data"]["model_path"] == str(expected_dir)
     assert (expected_dir / "model.bin").exists()
+    metadata_path = expected_dir / "metadata.json"
+    assert metadata_path.exists()
+    metadata_content = metadata_path.read_text(encoding="utf-8")
+    assert "selected_groups" in metadata_content
+    assert "prediction_length" in metadata_content
+    assert "context_length" in metadata_content
 
 
 def test_publish_model_invalid_version_format(client: TestClient):

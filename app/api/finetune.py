@@ -3,7 +3,6 @@
 """
 
 import json
-import shutil
 import uuid
 from pathlib import Path
 
@@ -39,6 +38,7 @@ from app.services.job_service import (
     batch_delete_jobs,
 )
 from app.services.queue_service import get_job_queue
+from app.services.model_release_service import release_model_directory
 
 router = APIRouter(prefix="/v1/finetune", tags=["finetune"])
 
@@ -368,9 +368,13 @@ async def release_finetuned_model(
     release_dir = release_root / release_name
 
     try:
-        if release_dir.exists():
-            shutil.rmtree(release_dir)
-        shutil.copytree(src=source_dir, dst=release_dir)
+        release_model_directory(
+            source_dir=source_dir,
+            release_dir=release_dir,
+            job=job,
+            user_id=user_id,
+            version=version,
+        )
     except Exception as exc:
         response = ReleaseModelResponse(
             code=500,

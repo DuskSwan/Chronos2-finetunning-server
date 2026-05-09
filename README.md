@@ -876,7 +876,16 @@ Content-Type: `application/json`
 用途: 使用已发布模型进行推理预测。  
 鉴权: Bearer Token（配置启用时）
 
-请求体:
+请求体（简化模式，推荐）:
+
+```json
+{
+  "model_path": "/abs/path/to/release/models/user_10001/v1.0.0/train_job_20260121103000",
+  "csv_path": "/abs/path/to/new_data.csv"
+}
+```
+
+请求体（高级覆盖模式）:
 
 ```json
 {
@@ -902,9 +911,9 @@ Content-Type: `application/json`
 | 字段 | 类型 | 必需 | 说明 |
 | ---- | ---- | ---- | ---- |
 | `model_path` | str | 是 | 发布后的模型目录绝对路径 |
-| `cov_group` | list[object] | 是 | 推理分组列表，元素形如 `{"target":"...","covariates":["..."]}` |
-| `prediction_length` | int | 是 | 预测长度（正整数） |
-| `context_length` | int | 是 | 上下文长度（正整数） |
+| `cov_group` | list[object] | 否 | 推理分组列表，元素形如 `{"target":"...","covariates":["..."]}`；不传时读取 metadata |
+| `prediction_length` | int | 否 | 预测长度（正整数）；不传时读取 metadata |
+| `context_length` | int | 否 | 上下文长度（正整数）；不传时读取 metadata |
 | `csv_path` | str | 是 | 推理输入 CSV 路径 |
 
 成功响应 200:
@@ -965,12 +974,44 @@ Content-Type: `application/json`
 ```
 
 说明:
-- 推理时每个 `cov_group` 会按 `target` 选择对应子模型目录：`finetuned-ckpt_<target>`。
+- 如果 `model_path/metadata.json` 存在，接口会默认读取 `selected_groups`、`prediction_length`、`context_length`。
+- 参数优先级：请求参数 > metadata 默认值。
+- 推理时每个 `cov_group` 会优先使用 `model_dir` 指向的子模型目录；若未提供则回退 `finetuned-ckpt_<target>`。
 - 每个 `target` 使用滚动窗口推理：每次取 `context_length` 行作为输入，预测接下来 `prediction_length` 个点，窗口按 `prediction_length` 前进。
 - 每个 `target` 的最终输出长度为 `n - context_length`（`n` 为 CSV 总行数）；最后一个窗口会按剩余长度裁剪。
 - 每个 `target` 的返回项包含 `prediction`（预测序列）和 `actual`（对应真实序列）。
 - `prediction` 与 `actual` 的长度都为 `n - context_length`。
 - 一次请求包含多个 `target` 时，会逐组推理并按 `cov_group` 顺序返回结果。
+
+#### GET /api/model/info
+
+用途: 查询发布模型的元数据（用于前端展示与推理前确认）。  
+鉴权: Bearer Token（配置启用时）
+
+请求参数:
+
+| 字段 | 类型 | 必需 | 说明 |
+| ---- | ---- | ---- | ---- |
+| `model_path` | str | 是 | 发布后的模型目录绝对路径 |
+
+成功响应 200:
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "model_path": "/abs/path/to/release/models/user_10001/v1.0.0/train_job_20260121103000",
+    "targets": ["value1", "value2"],
+    "selected_groups": [
+      {"target": "value1", "covariates": ["value2", "value3"]},
+      {"target": "value2", "covariates": ["value1", "value4"]}
+    ],
+    "prediction_length": 96,
+    "context_length": 512
+  }
+}
+```
 
 ## 测试
 

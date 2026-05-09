@@ -275,3 +275,53 @@ def test_infer_covariate_mismatch(client: TestClient, temp_base_dir: Path):
     assert body["code"] == 400
     assert "invalid csv data:" in body["message"]
     assert body["data"] is None
+
+
+def test_infer_model_minimal_request_use_metadata(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "ok.csv"
+    csv_path.write_text("value1,value2\n1,2\n3,4\n5,6\n", encoding="utf-8")
+
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_meta"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+    (model_root / "metadata.json").write_text(
+        (
+            '{"selected_groups":[{"target":"value1","covariates":["value2"]}],'
+            '"prediction_length":2,"context_length":2}'
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("app.services.inference_service.load_local_model", return_value=_FakePipeline([0.1, 0.2])):
+        response = client.post(
+            "/api/model/infer",
+            headers=_auth_header(),
+            json={
+                "model_path": str(model_root.resolve()),
+                "csv_path": str(csv_path.resolve()),
+            },
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 0
+    assert body["message"] == "success"
+    assert body["data"]["predictions"][0]["target"] == "value1"
+
+
+def test_infer_model_missing_metadata_and_missing_params(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "ok.csv"
+    csv_path.write_text("value1,value2\n1,2\n3,4\n5,6\n", encoding="utf-8")
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_nometa"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str(model_root.resolve()),
+            "csv_path": str(csv_path.resolve()),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 400
+    assert body["message"] == "cov_group is required when metadata.json is missing"

@@ -1,6 +1,4 @@
 """模型发布兼容接口。"""
-
-import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
@@ -16,6 +14,7 @@ from app.db.crud import get_job_by_id
 from app.db.session import get_db
 from app.schemas.request import ModelPublishRequest
 from app.schemas.response import ModelPublishData, ModelPublishResponse
+from app.services.model_release_service import release_model_directory
 
 router = APIRouter(prefix="/api/model", tags=["model_publish"])
 
@@ -64,10 +63,13 @@ async def publish_model(
     publish_dir = release_root / publish_subdir
 
     try:
-        if publish_dir.exists():
-            shutil.rmtree(publish_dir)
-        publish_dir.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source_dir, publish_dir)
+        release_model_directory(
+            source_dir=source_dir,
+            release_dir=publish_dir,
+            job=job,
+            user_id=str(request.user_id),
+            version=request.version,
+        )
     except Exception:
         response = ModelPublishResponse(code=500, message="internal error", data=None)
         logger.info("publish_model response:\n{}", to_pretty_log(response))
