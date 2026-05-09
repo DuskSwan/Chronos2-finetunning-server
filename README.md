@@ -1146,7 +1146,12 @@ CLI 会写入结构化 JSON：
 - `4`：推理业务错误
 - `1`：未预期错误
 
-### 4) 二进制打包（Windows, onedir）
+### 4) 二进制打包（Windows / Linux, onedir）
+
+注意：二进制不可跨平台通用。  
+Windows 产物请在 Windows 上打包，Linux 产物请在 Linux 上打包。
+
+#### Windows 打包
 
 先确保虚拟环境依赖已安装，然后执行：
 
@@ -1176,12 +1181,44 @@ dist/
 .\dist\chronos_infer\chronos_infer.exe --model-path .\models\job_x --csv-path .\data\input.csv --output-path .\result\output.json
 ```
 
+#### Linux 打包
+
+先确保在 Linux 机器（或 Linux 容器）中安装了同版本 Python 和依赖，然后执行：
+
+```bash
+chmod +x ./scripts/build_infer_exe.sh
+./scripts/build_infer_exe.sh
+```
+
+可选参数：
+
+```bash
+CLEAN=1 ./scripts/build_infer_exe.sh
+PYTHON_EXE=./.venv/bin/python DIST_DIR=dist ./scripts/build_infer_exe.sh
+```
+
+成功后产物位于：
+
+```text
+dist/
+└── chronos_infer/
+    ├── chronos_infer
+    └── ...runtime files...
+```
+
+运行示例：
+
+```bash
+./dist/chronos_infer/chronos_infer --model-path ./models/job_x --csv-path ./data/input.csv --output-path ./result/output.json
+```
+
 ### 5) 离线交付建议目录
 
 ```text
 edge_package/
 ├── chronos_infer/
-│   ├── chronos_infer.exe
+│   ├── chronos_infer.exe (Windows)
+│   ├── chronos_infer (Linux)
 │   └── ...
 ├── models/
 │   └── train_job_xxx/
