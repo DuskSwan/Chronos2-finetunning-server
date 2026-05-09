@@ -84,3 +84,17 @@ def test_model_info_success(client: TestClient, temp_base_dir: Path):
     assert body["data"]["prediction_length"] == 3
     assert body["data"]["context_length"] == 8
 
+
+def test_model_info_missing_metadata(client: TestClient, temp_base_dir: Path):
+    model_root = temp_base_dir / "release" / "models" / "u1" / "v1" / "job_no_meta"
+    model_root.mkdir(parents=True, exist_ok=True)
+
+    response = client.get(
+        "/api/model/info",
+        headers={"Authorization": "Bearer spec-token"},
+        params={"model_path": str(model_root.resolve())},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 404
+    assert body["message"] == "metadata.json not found"

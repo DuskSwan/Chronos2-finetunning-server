@@ -267,7 +267,7 @@ app/services/model_metadata_service.py
 - [x] 从训练任务中读取：
   - [x] `job_id`
   - [x] `target_model_map`
-  - [ ] `model_paths`
+  - [x] `model_paths`
 - [x] 为每个 selected group 补充对应的 `model_dir`。
 - [x] 将最终 metadata 写入：
 
@@ -523,15 +523,15 @@ if context_length is None:
 - [x] 检查 metadata 中包含 `selected_groups`。
 - [x] 检查 metadata 中包含 `prediction_length`。
 - [x] 检查 metadata 中包含 `context_length`。
-- [ ] 检查每个 group 中包含正确的 `target` 和 `covariates`。
-- [ ] 检查每个 group 中包含正确的 `model_dir`。
+- [x] 检查每个 group 中包含正确的 `target` 和 `covariates`。
+- [x] 检查每个 group 中包含正确的 `model_dir`。
 
 ---
 
 ### 8.2 简化推理请求测试
 
 - [x] 只传 `model_path` 和 `csv_path`，可以成功推理。
-- [ ] 返回结果中包含所有 metadata 中记录的 targets。
+- [x] 返回结果中包含所有 metadata 中记录的 targets。
 - [x] 返回结果格式与原接口一致。
 
 ---
@@ -549,8 +549,8 @@ if context_length is None:
 
 - [x] 模型目录中没有 `metadata.json`，但请求中完整传入 `cov_group`、`prediction_length`、`context_length` 时，仍可推理。
 - [x] 模型目录中没有 `metadata.json`，且请求中缺少 `cov_group` 时，返回明确错误。
-- [ ] 模型目录中没有 `metadata.json`，且请求中缺少 `prediction_length` 时，返回明确错误。
-- [ ] 模型目录中没有 `metadata.json`，且请求中缺少 `context_length` 时，返回明确错误。
+- [x] 模型目录中没有 `metadata.json`，且请求中缺少 `prediction_length` 时，返回明确错误。
+- [x] 模型目录中没有 `metadata.json`，且请求中缺少 `context_length` 时，返回明确错误。
 
 ---
 
@@ -558,14 +558,14 @@ if context_length is None:
 
 - [x] CSV 缺少 target 列时，返回 400。
 - [x] CSV 缺少 covariate 列时，返回 400。
-- [ ] CSV 对应列不是数值列时，返回 400。
+- [x] CSV 对应列不是数值列时，返回 400。
 - [x] CSV 行数小于或等于 `context_length` 时，返回 `history length is insufficient`。
 
 ---
 
 ### 8.6 子模型目录测试
 
-- [ ] metadata 中存在 `model_dir` 时，优先使用 `model_dir`。
+- [x] metadata 中存在 `model_dir` 时，优先使用 `model_dir`。
 - [x] metadata 中没有 `model_dir` 时，fallback 到 `finetuned-ckpt_<target>`。
 - [x] 子模型目录不存在时，返回 404。
 
@@ -578,7 +578,7 @@ if context_length is None:
 - [x] 返回结果中包含 `selected_groups`。
 - [x] 返回结果中包含 `prediction_length`。
 - [x] 返回结果中包含 `context_length`。
-- [ ] metadata 缺失时返回清晰错误。
+- [x] metadata 缺失时返回清晰错误。
 
 ---
 
@@ -599,7 +599,7 @@ if context_length is None:
 - [x] 前端可以通过 `/api/model/info` 获取模型可解释信息。
 - [x] 老接口调用方式仍然可用。
 - [x] 缺少 metadata 或 CSV 列异常时，后端返回清晰错误。
-- [ ] 所有新增和原有测试通过。
+- [x] 所有新增和原有测试通过。
 
 ---
 

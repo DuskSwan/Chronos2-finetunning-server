@@ -283,9 +283,11 @@ def test_infer_model_minimal_request_use_metadata(client: TestClient, temp_base_
 
     model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_meta"
     (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+    (model_root / "finetuned-ckpt_value2").mkdir(parents=True, exist_ok=True)
     (model_root / "metadata.json").write_text(
         (
-            '{"selected_groups":[{"target":"value1","covariates":["value2"]}],'
+            '{"selected_groups":[{"target":"value1","covariates":["value2"]},'
+            '{"target":"value2","covariates":["value1"]}],'
             '"prediction_length":2,"context_length":2}'
         ),
         encoding="utf-8",
@@ -304,7 +306,8 @@ def test_infer_model_minimal_request_use_metadata(client: TestClient, temp_base_
     body = response.json()
     assert body["code"] == 0
     assert body["message"] == "success"
-    assert body["data"]["predictions"][0]["target"] == "value1"
+    targets = [item["target"] for item in body["data"]["predictions"]]
+    assert targets == ["value1", "value2"]
 
 
 def test_infer_model_missing_metadata_and_missing_params(client: TestClient, temp_base_dir: Path):
@@ -325,3 +328,110 @@ def test_infer_model_missing_metadata_and_missing_params(client: TestClient, tem
     body = response.json()
     assert body["code"] == 400
     assert body["message"] == "cov_group is required when metadata.json is missing"
+
+
+def test_infer_model_missing_metadata_and_missing_prediction_length(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "ok.csv"
+    csv_path.write_text("value1,value2\n1,2\n3,4\n5,6\n", encoding="utf-8")
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_nometa_pred"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str(model_root.resolve()),
+            "csv_path": str(csv_path.resolve()),
+            "cov_group": [{"target": "value1", "covariates": ["value2"]}],
+            "context_length": 2,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 400
+    assert body["message"] == "prediction_length is required when metadata.json is missing"
+
+
+def test_infer_model_missing_metadata_and_missing_context_length(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "ok.csv"
+    csv_path.write_text("value1,value2\n1,2\n3,4\n5,6\n", encoding="utf-8")
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_nometa_ctx"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str(model_root.resolve()),
+            "csv_path": str(csv_path.resolve()),
+            "cov_group": [{"target": "value1", "covariates": ["value2"]}],
+            "prediction_length": 2,
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 400
+    assert body["message"] == "context_length is required when metadata.json is missing"
+
+
+def test_infer_non_numeric_column(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "bad_type.csv"
+    csv_path.write_text("value1,value2\n1,a\n2,b\n3,c\n4,d\n", encoding="utf-8")
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_bad_type"
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+    (model_root / "metadata.json").write_text(
+        (
+            '{"selected_groups":[{"target":"value1","covariates":["value2"]}],'
+            '"prediction_length":2,"context_length":2}'
+        ),
+        encoding="utf-8",
+    )
+    response = client.post(
+        "/api/model/infer",
+        headers=_auth_header(),
+        json={
+            "model_path": str(model_root.resolve()),
+            "csv_path": str(csv_path.resolve()),
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 400
+    assert body["message"] == "column 'value2' must be numeric"
+
+
+def test_infer_use_model_dir_from_metadata(client: TestClient, temp_base_dir: Path):
+    csv_path = temp_base_dir / "ok.csv"
+    csv_path.write_text("value1,value2\n1,2\n3,4\n5,6\n7,8\n", encoding="utf-8")
+    model_root = temp_base_dir / "release" / "models" / "u" / "v1" / "job_model_dir"
+    (model_root / "custom_model_value1").mkdir(parents=True, exist_ok=True)
+    (model_root / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
+    (model_root / "metadata.json").write_text(
+        (
+            '{"selected_groups":[{"target":"value1","covariates":["value2"],"model_dir":"custom_model_value1"}],'
+            '"prediction_length":2,"context_length":2}'
+        ),
+        encoding="utf-8",
+    )
+
+    used_paths: list[str] = []
+
+    def fake_loader(path, device="cpu"):
+        _ = device
+        used_paths.append(str(path))
+        return _FakePipeline([0.1, 0.2])
+
+    with patch("app.services.inference_service.load_local_model", side_effect=fake_loader):
+        response = client.post(
+            "/api/model/infer",
+            headers=_auth_header(),
+            json={
+                "model_path": str(model_root.resolve()),
+                "csv_path": str(csv_path.resolve()),
+            },
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 0
+    assert used_paths
+    assert Path(used_paths[0]).name == "custom_model_value1"

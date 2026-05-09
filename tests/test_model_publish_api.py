@@ -16,6 +16,7 @@ from app.db import crud
 from app.db.models import Base
 from app.db.session import get_db
 from app.main import create_app
+import json
 
 
 @pytest.fixture
@@ -86,11 +87,22 @@ def test_publish_model_success(client: TestClient, test_db_session, temp_base_di
     source_dir.mkdir(parents=True, exist_ok=True)
     (source_dir / "model.bin").write_text("mock model", encoding="utf-8")
 
+    request_payload = {
+        "selected_groups": [
+            {"target": "value1", "covariates": ["value2", "value3"]},
+        ],
+        "prediction_length": 12,
+        "context_length": 24,
+        "finetune_mode": "lora",
+        "learning_rate": 0.0001,
+        "num_steps": 100,
+        "batch_size": 8,
+    }
     crud.create_job(
         db=test_db_session,
         job_id=job_id,
         status="queued",
-        request_json="{}",
+        request_json=json.dumps(request_payload),
         output_dir=str(source_dir),
         log_path=str(temp_base_dir / "logs" / f"{job_id}.log"),
         max_steps=1,
@@ -98,9 +110,11 @@ def test_publish_model_success(client: TestClient, test_db_session, temp_base_di
     crud.mark_job_completed(
         db=test_db_session,
         job_id=job_id,
-        model_paths=[str(source_dir)],
+        target_model_map={"value1": str(source_dir / "finetuned-ckpt_value1")},
+        model_paths=[str(source_dir / "finetuned-ckpt_value1")],
         finished_at=datetime.now(timezone.utc),
     )
+    (source_dir / "finetuned-ckpt_value1").mkdir(parents=True, exist_ok=True)
 
     response = client.post(
         "/api/model/publish",
@@ -118,10 +132,13 @@ def test_publish_model_success(client: TestClient, test_db_session, temp_base_di
     assert (expected_dir / "model.bin").exists()
     metadata_path = expected_dir / "metadata.json"
     assert metadata_path.exists()
-    metadata_content = metadata_path.read_text(encoding="utf-8")
-    assert "selected_groups" in metadata_content
-    assert "prediction_length" in metadata_content
-    assert "context_length" in metadata_content
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert "selected_groups" in metadata
+    assert metadata["prediction_length"] == 12
+    assert metadata["context_length"] == 24
+    assert metadata["selected_groups"][0]["target"] == "value1"
+    assert metadata["selected_groups"][0]["covariates"] == ["value2", "value3"]
+    assert metadata["selected_groups"][0]["model_dir"] == "finetuned-ckpt_value1"
 
 
 def test_publish_model_invalid_version_format(client: TestClient):

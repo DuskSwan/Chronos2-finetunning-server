@@ -33,6 +33,21 @@ def build_model_metadata(
         target_model_map = json.loads(job.target_model_map or "{}")
     except json.JSONDecodeError:
         target_model_map = {}
+    try:
+        model_paths = json.loads(job.model_paths or "[]")
+    except json.JSONDecodeError:
+        model_paths = []
+    if not isinstance(model_paths, list):
+        model_paths = []
+
+    if not target_model_map and model_paths:
+        for abs_model_path in model_paths:
+            name = Path(str(abs_model_path)).name
+            prefix = "finetuned-ckpt_"
+            if name.startswith(prefix):
+                target = name[len(prefix):]
+                if target and target not in target_model_map:
+                    target_model_map[target] = str(abs_model_path)
 
     selected_groups = request_payload.get("selected_groups") or []
     groups_with_model: list[dict[str, Any]] = []
@@ -84,4 +99,3 @@ def release_model_directory(
     metadata = build_model_metadata(job=job, user_id=user_id, version=version)
     write_model_metadata(release_dir, metadata)
     return release_dir
-

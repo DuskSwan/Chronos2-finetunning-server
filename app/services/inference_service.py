@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from pandas.api.types import is_numeric_dtype
 
 from app.schemas.request import InferCovGroup
 from app.schemas.response import InferPredictionItem
@@ -129,7 +130,7 @@ def run_inference(
         for col in cols:
             if col not in df.columns:
                 raise InferenceError(400, f"missing column which model required: {col}")
-            if not np.issubdtype(df[col].dtype, np.number):
+            if not is_numeric_dtype(df[col]):
                 raise InferenceError(400, f"column '{col}' must be numeric")
 
     history_length = df.shape[0]
