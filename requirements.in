@@ -9,6 +9,7 @@ pandas
 pyarrow
 loguru
 peft
+pyzmq
 
 pytest-asyncio
 httpx

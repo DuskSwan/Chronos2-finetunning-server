@@ -273,7 +273,7 @@ def test_infer_covariate_mismatch(client: TestClient, temp_base_dir: Path):
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 400
-    assert "invalid csv data:" in body["message"]
+    assert body["message"] == "missing column which model required: missing_col"
     assert body["data"] is None
 
 

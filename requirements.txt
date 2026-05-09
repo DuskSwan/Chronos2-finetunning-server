@@ -109,6 +109,8 @@ psutil==7.2.2
     #   peft
 pyarrow==23.0.1
     # via -r requirements.in
+pyzmq==27.1.0
+    # via -r requirements.in
 pydantic==2.12.5
     # via
     #   -r requirements.in

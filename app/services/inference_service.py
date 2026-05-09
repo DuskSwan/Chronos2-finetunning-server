@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from pandas.api.types import is_numeric_dtype
 
 from app.schemas.request import InferCovGroup
@@ -86,11 +87,37 @@ def run_inference(
     if not csv_file.exists() or not csv_file.is_file():
         raise InferenceError(404, "csv_path not found")
 
+    try:
+        df = load_data(str(csv_file))
+    except Exception as exc:
+        raise InferenceError(400, f"invalid csv data: {exc}") from exc
+
+    return run_inference_from_dataframe(
+        model_path=model_path,
+        cov_group=cov_group,
+        prediction_length=prediction_length,
+        context_length=context_length,
+        dataframe=df,
+        target_filter=target_filter,
+        require_metadata=False,
+    )
+
+
+def _resolve_inference_config(
+    release_model_dir: Path,
+    cov_group: list[InferCovGroup] | None,
+    prediction_length: int | None,
+    context_length: int | None,
+    target_filter: list[str] | None,
+    require_metadata: bool,
+) -> tuple[list[InferCovGroup], int, int, dict[str, str]]:
     metadata: dict[str, Any] | None = None
     try:
         metadata = load_model_metadata(release_model_dir)
     except ModelMetadataError:
         metadata = None
+    if require_metadata and metadata is None:
+        raise InferenceError(400, "metadata.json is required")
 
     metadata_model_dir_map: dict[str, str] = {}
     final_cov_group = cov_group
@@ -127,17 +154,40 @@ def run_inference(
         raise InferenceError(400, "context_length is required when metadata.json is missing")
     if final_context_length <= 0:
         raise InferenceError(400, "context_length must be a positive integer")
+    return final_cov_group, final_prediction_length, final_context_length, metadata_model_dir_map
+
+
+def run_inference_from_dataframe(
+    model_path: str,
+    cov_group: list[InferCovGroup] | None,
+    prediction_length: int | None,
+    context_length: int | None,
+    dataframe: pd.DataFrame,
+    target_filter: list[str] | None = None,
+    require_metadata: bool = False,
+) -> list[InferPredictionItem]:
+    """执行推理并返回按 cov_group 顺序的预测结果（DataFrame 输入）。"""
+    release_model_dir = Path(model_path)
+    if not release_model_dir.exists() or not release_model_dir.is_dir():
+        raise InferenceError(404, "model path not found")
+    if not isinstance(dataframe, pd.DataFrame):
+        raise InferenceError(400, "dataframe input is required")
+    df = dataframe.copy()
+
+    final_cov_group, final_prediction_length, final_context_length, metadata_model_dir_map = _resolve_inference_config(
+        release_model_dir=release_model_dir,
+        cov_group=cov_group,
+        prediction_length=prediction_length,
+        context_length=context_length,
+        target_filter=target_filter,
+        require_metadata=require_metadata,
+    )
 
     required_columns: list[str] = []
     for group in final_cov_group:
         required_columns.append(group.target)
         required_columns.extend(group.covariates)
     required_columns = list(dict.fromkeys(required_columns))
-
-    try:
-        df = load_data(str(csv_file), target_columns=required_columns)
-    except Exception as exc:
-        raise InferenceError(400, f"invalid csv data: {exc}") from exc
 
     for group in final_cov_group:
         cols = [group.target, *group.covariates]
