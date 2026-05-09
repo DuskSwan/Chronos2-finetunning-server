@@ -1089,3 +1089,107 @@ pytest tests/test_create_job.py::test_create_finetune_job_success -v
 ## 许可证
 
 内部项目，仅供模型微调研究使用。
+
+## 边端离线推理 CLI
+
+项目已提供离线推理命令行入口：`app.cli.infer_cli`。
+
+### 1) 直接用 Python 运行
+
+```bash
+python -m app.cli.infer_cli \
+  --model-path ./release/models/user_10001/v1.0.0/train_job_xxx \
+  --csv-path ./data/input.csv \
+  --output-path ./result/output.json
+```
+
+### 2) 参数说明
+
+- `--model-path`：发布模型目录（必填）
+- `--csv-path`：输入 CSV 路径（必填）
+- `--output-path`：输出 JSON 路径（必填）
+- `--prediction-length`：覆盖 metadata 默认值（可选）
+- `--context-length`：覆盖 metadata 默认值（可选）
+- `--targets`：仅推理指定 target，逗号分隔（可选）
+- `--verbose`：输出详细错误堆栈（可选）
+- `--version`：查看 CLI 版本
+
+参数优先级：显式参数 > `metadata.json` 默认值。
+
+### 3) 输出格式
+
+CLI 会写入结构化 JSON：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "model_path": "...",
+    "csv_path": "...",
+    "predictions": [
+      {
+        "target": "value1",
+        "prediction": [0.1, 0.2],
+        "actual": [10.1, 10.4]
+      }
+    ]
+  }
+}
+```
+
+退出码约定：
+
+- `0`：成功
+- `2`：参数错误
+- `3`：路径/文件不存在
+- `4`：推理业务错误
+- `1`：未预期错误
+
+### 4) 二进制打包（Windows, onedir）
+
+先确保虚拟环境依赖已安装，然后执行：
+
+```powershell
+.\scripts\build_infer_exe.ps1
+```
+
+可选参数：
+
+```powershell
+.\scripts\build_infer_exe.ps1 -Clean
+.\scripts\build_infer_exe.ps1 -PythonExe ".\.venv\Scripts\python.exe" -DistDir "dist"
+```
+
+成功后产物位于：
+
+```text
+dist/
+└── chronos_infer/
+    ├── chronos_infer.exe
+    └── ...runtime files...
+```
+
+运行示例：
+
+```powershell
+.\dist\chronos_infer\chronos_infer.exe --model-path .\models\job_x --csv-path .\data\input.csv --output-path .\result\output.json
+```
+
+### 5) 离线交付建议目录
+
+```text
+edge_package/
+├── chronos_infer/
+│   ├── chronos_infer.exe
+│   └── ...
+├── models/
+│   └── train_job_xxx/
+│       ├── metadata.json
+│       └── finetuned-ckpt_<target>/
+├── data/
+│   └── input.csv
+└── result/
+```
+
+说明：程序不内置模型和数据，均通过命令行路径传入。

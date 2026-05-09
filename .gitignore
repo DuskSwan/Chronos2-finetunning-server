@@ -29,3 +29,9 @@ logs/
 
 chronos-2-finetuned/
 release/
+
+# offline infer / packaging temp artifacts
+chronos_infer.spec
+tmp_cli_real/
+tmp_cli_real_run/
+tmp_cli_smoke/
