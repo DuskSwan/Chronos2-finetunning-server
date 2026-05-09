@@ -234,20 +234,20 @@ app/
 
 ### 6.1 定义模型元数据读写工具
 
-- [ ] 新增或复用一个模型元数据工具模块，例如：
+- [x] 新增或复用一个模型元数据工具模块，例如：
 
 ```text
 app/services/model_metadata_service.py
 ```
 
-- [ ] 实现 `write_model_metadata(model_path, metadata)`。
-- [ ] 实现 `load_model_metadata(model_path)`。
-- [ ] 当 `<model_path>/metadata.json` 不存在时，返回清晰错误。
-- [ ] 当 `metadata.json` 不是合法 JSON 时，返回清晰错误。
-- [ ] 校验 metadata 中至少包含：
-  - [ ] `selected_groups`
-  - [ ] `prediction_length`
-  - [ ] `context_length`
+- [x] 实现 `write_model_metadata(model_path, metadata)`。
+- [x] 实现 `load_model_metadata(model_path)`。
+- [x] 当 `<model_path>/metadata.json` 不存在时，返回清晰错误。
+- [x] 当 `metadata.json` 不是合法 JSON 时，返回清晰错误。
+- [x] 校验 metadata 中至少包含：
+  - [x] `selected_groups`
+  - [x] `prediction_length`
+  - [x] `context_length`
 
 ---
 
@@ -255,30 +255,30 @@ app/services/model_metadata_service.py
 
 在 `/api/model/publish` 或 `/v1/finetune/jobs/release` 对应的发布逻辑中：
 
-- [ ] 发布模型目录时，除了复制模型文件，也要生成 `metadata.json`。
-- [ ] 从训练任务的 `request_json` 中读取：
-  - [ ] `selected_groups`
-  - [ ] `prediction_length`
-  - [ ] `context_length`
-  - [ ] `finetune_mode`
-  - [ ] `learning_rate`
-  - [ ] `num_steps`
-  - [ ] `batch_size`
-- [ ] 从训练任务中读取：
-  - [ ] `job_id`
-  - [ ] `target_model_map`
+- [x] 发布模型目录时，除了复制模型文件，也要生成 `metadata.json`。
+- [x] 从训练任务的 `request_json` 中读取：
+  - [x] `selected_groups`
+  - [x] `prediction_length`
+  - [x] `context_length`
+  - [x] `finetune_mode`
+  - [x] `learning_rate`
+  - [x] `num_steps`
+  - [x] `batch_size`
+- [x] 从训练任务中读取：
+  - [x] `job_id`
+  - [x] `target_model_map`
   - [ ] `model_paths`
-- [ ] 为每个 selected group 补充对应的 `model_dir`。
-- [ ] 将最终 metadata 写入：
+- [x] 为每个 selected group 补充对应的 `model_dir`。
+- [x] 将最终 metadata 写入：
 
 ```text
 <released_model_path>/metadata.json
 ```
 
-- [ ] 如果发布目录已存在并被覆盖，确保新的 `metadata.json` 也被重新生成。
-- [ ] 确保两个发布接口的行为一致：
-  - [ ] `/v1/finetune/jobs/release`
-  - [ ] `/api/model/publish`
+- [x] 如果发布目录已存在并被覆盖，确保新的 `metadata.json` 也被重新生成。
+- [x] 确保两个发布接口的行为一致：
+  - [x] `/v1/finetune/jobs/release`
+  - [x] `/api/model/publish`
 
 ---
 
@@ -292,11 +292,11 @@ app/services/model_metadata_service.py
 
 需要修改为：
 
-- [ ] `cov_group` 改为可选。
-- [ ] `prediction_length` 改为可选。
-- [ ] `context_length` 改为可选。
-- [ ] `model_path` 仍然必需。
-- [ ] `csv_path` 仍然必需。
+- [x] `cov_group` 改为可选。
+- [x] `prediction_length` 改为可选。
+- [x] `context_length` 改为可选。
+- [x] `model_path` 仍然必需。
+- [x] `csv_path` 仍然必需。
 
 推荐语义：
 
@@ -308,10 +308,10 @@ context_length = request.context_length or metadata.context_length
 
 注意：
 
-- [ ] 如果请求中没有传 `cov_group`，但 metadata 中也没有 `selected_groups`，应返回错误。
-- [ ] 如果请求中没有传 `prediction_length`，但 metadata 中也没有，应该返回错误。
-- [ ] 如果请求中没有传 `context_length`，但 metadata 中也没有，应该返回错误。
-- [ ] 如果请求中传入了无效的正整数，也应该返回错误。
+- [x] 如果请求中没有传 `cov_group`，但 metadata 中也没有 `selected_groups`，应返回错误。
+- [x] 如果请求中没有传 `prediction_length`，但 metadata 中也没有，应该返回错误。
+- [x] 如果请求中没有传 `context_length`，但 metadata 中也没有，应该返回错误。
+- [x] 如果请求中传入了无效的正整数，也应该返回错误。
 
 ---
 
@@ -331,10 +331,10 @@ context_length = request.context_length or metadata.context_length
 
 需要完成：
 
-- [ ] 推理入口先加载 metadata。
-- [ ] 请求参数优先级高于 metadata。
-- [ ] metadata 只提供默认配置。
-- [ ] 保持现有返回格式不变：
+- [x] 推理入口先加载 metadata。
+- [x] 请求参数优先级高于 metadata。
+- [x] metadata 只提供默认配置。
+- [x] 保持现有返回格式不变：
 
 ```json
 {
@@ -352,7 +352,7 @@ context_length = request.context_length or metadata.context_length
 }
 ```
 
-- [ ] 保持现有错误格式不变：
+- [x] 保持现有错误格式不变：
 
 ```json
 {
@@ -377,10 +377,10 @@ context_length = request.context_length or metadata.context_length
 
 需要完成：
 
-- [ ] 实现 `resolve_model_dir(model_path, group)`。
-- [ ] 优先读取 `group["model_dir"]`。
-- [ ] 缺失时兼容旧目录命名。
-- [ ] 找不到子模型目录时返回清晰错误：
+- [x] 实现 `resolve_model_dir(model_path, group)`。
+- [x] 优先读取 `group["model_dir"]`。
+- [x] 缺失时兼容旧目录命名。
+- [x] 找不到子模型目录时返回清晰错误：
 
 ```json
 {
@@ -398,10 +398,10 @@ context_length = request.context_length or metadata.context_length
 
 需要完成：
 
-- [ ] 检查每个 `target` 是否存在于 CSV 列中。
-- [ ] 检查每个 `covariate` 是否存在于 CSV 列中。
-- [ ] 检查 target 和 covariates 是否为数值列。
-- [ ] 如果缺列，返回清晰错误，例如：
+- [x] 检查每个 `target` 是否存在于 CSV 列中。
+- [x] 检查每个 `covariate` 是否存在于 CSV 列中。
+- [x] 检查 target 和 covariates 是否为数值列。
+- [x] 如果缺列，返回清晰错误，例如：
 
 ```json
 {
@@ -411,7 +411,7 @@ context_length = request.context_length or metadata.context_length
 }
 ```
 
-- [ ] 如果列不是数值列，返回清晰错误，例如：
+- [x] 如果列不是数值列，返回清晰错误，例如：
 
 ```json
 {
@@ -464,13 +464,13 @@ GET /api/model/info?model_path=...
 
 需要完成：
 
-- [ ] 新增 `/api/model/info` 路由。
-- [ ] 读取 `metadata.json`。
-- [ ] 返回 `targets`。
-- [ ] 返回 `selected_groups`。
-- [ ] 返回默认 `prediction_length`。
-- [ ] 返回默认 `context_length`。
-- [ ] 如果 `metadata.json` 不存在，返回清晰错误。
+- [x] 新增 `/api/model/info` 路由。
+- [x] 读取 `metadata.json`。
+- [x] 返回 `targets`。
+- [x] 返回 `selected_groups`。
+- [x] 返回默认 `prediction_length`。
+- [x] 返回默认 `context_length`。
+- [x] 如果 `metadata.json` 不存在，返回清晰错误。
 
 ---
 
@@ -480,11 +480,11 @@ GET /api/model/info?model_path=...
 
 需要保证：
 
-- [ ] 旧的推理请求仍然可用，即仍然允许前端传入完整 `cov_group`。
-- [ ] 旧的 `prediction_length` / `context_length` 显式传参仍然可用。
-- [ ] 如果发布目录没有 `metadata.json`，但请求中完整传入了 `cov_group`、`prediction_length`、`context_length`，可以继续使用旧逻辑推理。
-- [ ] 如果发布目录没有 `metadata.json`，且请求中缺少必要参数，应返回明确错误，而不是程序崩溃。
-- [ ] 现有返回结构不应破坏前端兼容性。
+- [x] 旧的推理请求仍然可用，即仍然允许前端传入完整 `cov_group`。
+- [x] 旧的 `prediction_length` / `context_length` 显式传参仍然可用。
+- [x] 如果发布目录没有 `metadata.json`，但请求中完整传入了 `cov_group`、`prediction_length`、`context_length`，可以继续使用旧逻辑推理。
+- [x] 如果发布目录没有 `metadata.json`，且请求中缺少必要参数，应返回明确错误，而不是程序崩溃。
+- [x] 现有返回结构不应破坏前端兼容性。
 
 推荐判断逻辑：
 
@@ -519,10 +519,10 @@ if context_length is None:
 
 ### 8.1 metadata 写入测试
 
-- [ ] 发布模型后，检查发布目录下存在 `metadata.json`。
-- [ ] 检查 metadata 中包含 `selected_groups`。
-- [ ] 检查 metadata 中包含 `prediction_length`。
-- [ ] 检查 metadata 中包含 `context_length`。
+- [x] 发布模型后，检查发布目录下存在 `metadata.json`。
+- [x] 检查 metadata 中包含 `selected_groups`。
+- [x] 检查 metadata 中包含 `prediction_length`。
+- [x] 检查 metadata 中包含 `context_length`。
 - [ ] 检查每个 group 中包含正确的 `target` 和 `covariates`。
 - [ ] 检查每个 group 中包含正确的 `model_dir`。
 
@@ -530,25 +530,25 @@ if context_length is None:
 
 ### 8.2 简化推理请求测试
 
-- [ ] 只传 `model_path` 和 `csv_path`，可以成功推理。
+- [x] 只传 `model_path` 和 `csv_path`，可以成功推理。
 - [ ] 返回结果中包含所有 metadata 中记录的 targets。
-- [ ] 返回结果格式与原接口一致。
+- [x] 返回结果格式与原接口一致。
 
 ---
 
 ### 8.3 覆盖参数测试
 
-- [ ] 请求中显式传入 `cov_group` 时，使用请求中的 `cov_group`。
-- [ ] 请求中显式传入 `prediction_length` 时，使用请求中的值。
-- [ ] 请求中显式传入 `context_length` 时，使用请求中的值。
-- [ ] 未显式传入的参数仍从 metadata 中读取。
+- [x] 请求中显式传入 `cov_group` 时，使用请求中的 `cov_group`。
+- [x] 请求中显式传入 `prediction_length` 时，使用请求中的值。
+- [x] 请求中显式传入 `context_length` 时，使用请求中的值。
+- [x] 未显式传入的参数仍从 metadata 中读取。
 
 ---
 
 ### 8.4 旧模型兼容测试
 
-- [ ] 模型目录中没有 `metadata.json`，但请求中完整传入 `cov_group`、`prediction_length`、`context_length` 时，仍可推理。
-- [ ] 模型目录中没有 `metadata.json`，且请求中缺少 `cov_group` 时，返回明确错误。
+- [x] 模型目录中没有 `metadata.json`，但请求中完整传入 `cov_group`、`prediction_length`、`context_length` 时，仍可推理。
+- [x] 模型目录中没有 `metadata.json`，且请求中缺少 `cov_group` 时，返回明确错误。
 - [ ] 模型目录中没有 `metadata.json`，且请求中缺少 `prediction_length` 时，返回明确错误。
 - [ ] 模型目录中没有 `metadata.json`，且请求中缺少 `context_length` 时，返回明确错误。
 
@@ -556,49 +556,35 @@ if context_length is None:
 
 ### 8.5 CSV 校验测试
 
-- [ ] CSV 缺少 target 列时，返回 400。
-- [ ] CSV 缺少 covariate 列时，返回 400。
+- [x] CSV 缺少 target 列时，返回 400。
+- [x] CSV 缺少 covariate 列时，返回 400。
 - [ ] CSV 对应列不是数值列时，返回 400。
-- [ ] CSV 行数小于或等于 `context_length` 时，返回 `history length is insufficient`。
+- [x] CSV 行数小于或等于 `context_length` 时，返回 `history length is insufficient`。
 
 ---
 
 ### 8.6 子模型目录测试
 
 - [ ] metadata 中存在 `model_dir` 时，优先使用 `model_dir`。
-- [ ] metadata 中没有 `model_dir` 时，fallback 到 `finetuned-ckpt_<target>`。
-- [ ] 子模型目录不存在时，返回 404。
+- [x] metadata 中没有 `model_dir` 时，fallback 到 `finetuned-ckpt_<target>`。
+- [x] 子模型目录不存在时，返回 404。
 
 ---
 
 ### 8.7 模型信息接口测试
 
-- [ ] `/api/model/info?model_path=...` 可以返回模型元数据。
-- [ ] 返回结果中包含 `targets`。
-- [ ] 返回结果中包含 `selected_groups`。
-- [ ] 返回结果中包含 `prediction_length`。
-- [ ] 返回结果中包含 `context_length`。
+- [x] `/api/model/info?model_path=...` 可以返回模型元数据。
+- [x] 返回结果中包含 `targets`。
+- [x] 返回结果中包含 `selected_groups`。
+- [x] 返回结果中包含 `prediction_length`。
+- [x] 返回结果中包含 `context_length`。
 - [ ] metadata 缺失时返回清晰错误。
 
 ---
 
 ## 9. 前端改造建议
 
-前端可以改为：
-
-- [ ] 推理页面只要求用户选择：
-  - [ ] 已发布模型
-  - [ ] 推理 CSV 文件
-- [ ] 调用 `/api/model/info` 展示该模型信息：
-  - [ ] 可预测变量
-  - [ ] 每个变量依赖的 covariates
-  - [ ] 默认 context_length
-  - [ ] 默认 prediction_length
-- [ ] 默认不展示 `cov_group` 编辑入口。
-- [ ] 可以保留一个“高级设置”区域，允许用户覆盖：
-  - [ ] `cov_group`
-  - [ ] `prediction_length`
-  - [ ] `context_length`
+略过，本服务只负责后端
 
 ---
 
@@ -606,13 +592,13 @@ if context_length is None:
 
 本次改造完成后，应满足：
 
-- [ ] 用户不需要记住训练时的变量相关组。
-- [ ] 用户只传 `model_path` 和 `csv_path` 即可推理。
-- [ ] 模型发布目录下包含 `metadata.json`。
-- [ ] 推理接口能自动读取 metadata。
-- [ ] 前端可以通过 `/api/model/info` 获取模型可解释信息。
-- [ ] 老接口调用方式仍然可用。
-- [ ] 缺少 metadata 或 CSV 列异常时，后端返回清晰错误。
+- [x] 用户不需要记住训练时的变量相关组。
+- [x] 用户只传 `model_path` 和 `csv_path` 即可推理。
+- [x] 模型发布目录下包含 `metadata.json`。
+- [x] 推理接口能自动读取 metadata。
+- [x] 前端可以通过 `/api/model/info` 获取模型可解释信息。
+- [x] 老接口调用方式仍然可用。
+- [x] 缺少 metadata 或 CSV 列异常时，后端返回清晰错误。
 - [ ] 所有新增和原有测试通过。
 
 ---
@@ -621,14 +607,14 @@ if context_length is None:
 
 建议按以下顺序实现：
 
-1. [ ] 新增 metadata 读写工具。
-2. [ ] 修改发布逻辑，生成 `metadata.json`。
-3. [ ] 修改推理请求 schema，将 `cov_group`、`prediction_length`、`context_length` 改为可选。
-4. [ ] 修改推理逻辑，从 metadata 中补齐缺失参数。
-5. [ ] 增加 CSV 列校验和子模型目录解析逻辑。
-6. [ ] 新增 `/api/model/info` 接口。
-7. [ ] 补充测试。
-8. [ ] 更新 README 中 `/api/model/infer` 和 `/api/model/info` 的说明。
+1. [x] 新增 metadata 读写工具。
+2. [x] 修改发布逻辑，生成 `metadata.json`。
+3. [x] 修改推理请求 schema，将 `cov_group`、`prediction_length`、`context_length` 改为可选。
+4. [x] 修改推理逻辑，从 metadata 中补齐缺失参数。
+5. [x] 增加 CSV 列校验和子模型目录解析逻辑。
+6. [x] 新增 `/api/model/info` 接口。
+7. [x] 补充测试。
+8. [x] 更新 README 中 `/api/model/infer` 和 `/api/model/info` 的说明。
 
 ---
 
