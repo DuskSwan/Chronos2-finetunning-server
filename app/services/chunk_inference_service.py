@@ -9,8 +9,10 @@ from time import time
 from typing import Any
 
 import pandas as pd
+from loguru import logger
 from pandas.api.types import is_numeric_dtype
 
+from app.core.config import get_settings
 from app.schemas.request import InferCovGroup
 from app.schemas.response import InferPredictionItem
 from app.services.inference_service import (
@@ -36,6 +38,30 @@ class _TaskCacheEntry:
 
 _TASK_CACHE: dict[str, _TaskCacheEntry] = {}
 _TASK_CACHE_LOCK = RLock()
+
+
+def _expire_stale_tasks_unlocked(now_ts: float) -> None:
+    settings = get_settings()
+    ttl = max(int(settings.chunk_infer_cache_ttl_seconds), 0)
+    if ttl <= 0:
+        return
+
+    expired_task_ids = [
+        task_id
+        for task_id, entry in _TASK_CACHE.items()
+        if now_ts - entry.last_access_at > ttl
+    ]
+    for task_id in expired_task_ids:
+        _TASK_CACHE.pop(task_id, None)
+        logger.info("chunk infer cache evicted by ttl: task_id={}", task_id)
+
+
+def _ensure_capacity_unlocked() -> None:
+    settings = get_settings()
+    max_tasks = max(int(settings.chunk_infer_cache_max_tasks), 1)
+    if len(_TASK_CACHE) < max_tasks:
+        return
+    raise InferenceError(500, "chunk inference cache is full")
 
 
 def get_model_infer_config(model_path: str) -> tuple[int, int]:
@@ -82,22 +108,30 @@ def _load_task_entry(task_id: str, model_path: str) -> _TaskCacheEntry:
 
 def _get_or_create_task_entry(task_id: str, model_path: str) -> tuple[_TaskCacheEntry, bool]:
     with _TASK_CACHE_LOCK:
+        now_ts = time()
+        _expire_stale_tasks_unlocked(now_ts)
+
         entry = _TASK_CACHE.get(task_id)
         if entry is not None:
             if Path(entry.model_path).resolve() != Path(model_path).resolve():
                 raise InferenceError(409, "task_id conflicts with another model_path")
-            entry.last_access_at = time()
+            entry.last_access_at = now_ts
+            logger.info("chunk infer cache hit: task_id={}, cache_size={}", task_id, len(_TASK_CACHE))
             return entry, True
 
+        _ensure_capacity_unlocked()
         new_entry = _load_task_entry(task_id=task_id, model_path=model_path)
         _TASK_CACHE[task_id] = new_entry
+        logger.info("chunk infer cache load: task_id={}, cache_size={}", task_id, len(_TASK_CACHE))
         return new_entry, False
 
 
 def release_task_models(task_id: str) -> None:
     """释放任务缓存模型。"""
     with _TASK_CACHE_LOCK:
-        _TASK_CACHE.pop(task_id, None)
+        removed = _TASK_CACHE.pop(task_id, None)
+        if removed is not None:
+            logger.info("chunk infer cache released: task_id={}, cache_size={}", task_id, len(_TASK_CACHE))
 
 
 def run_chunk_inference(

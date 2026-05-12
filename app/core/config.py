@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # 开关
     save_request_artifacts: bool = True # 是否保存请求 JSON 到产物目录 
     api_bearer_token: str = ""
+    chunk_infer_cache_ttl_seconds: int = 1800
+    chunk_infer_cache_max_tasks: int = 128
     
     @property
     def sqlite_db_path_resolved(self) -> Path:
