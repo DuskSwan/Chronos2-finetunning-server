@@ -149,6 +149,68 @@ def test_infer_config_success():
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+def test_infer_config_model_path_not_found():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        response = client.get(
+            "/api/model/infer/config",
+            headers=_auth_header(),
+            params={"model_path": str((temp_dir / "release" / "missing").resolve())},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 404
+        assert body["message"] == "model path not found"
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_config_missing_metadata():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        model_root = temp_dir / "release" / "models" / "u1" / "v1.0.0" / "job_no_meta"
+        model_root.mkdir(parents=True, exist_ok=True)
+        response = client.get(
+            "/api/model/infer/config",
+            headers=_auth_header(),
+            params={"model_path": str(model_root.resolve())},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 404
+        assert body["message"] == "metadata.json not found"
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_config_missing_required_metadata_field():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        model_root = temp_dir / "release" / "models" / "u1" / "v1.0.0" / "job_meta_missing_field"
+        model_root.mkdir(parents=True, exist_ok=True)
+        (model_root / "metadata.json").write_text(
+            '{"selected_groups":[{"target":"value1","covariates":["value2"]}],"prediction_length":2}',
+            encoding="utf-8",
+        )
+        response = client.get(
+            "/api/model/infer/config",
+            headers=_auth_header(),
+            params={"model_path": str(model_root.resolve())},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 400
+        assert body["message"] == "metadata.json missing required field: context_length"
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def test_infer_chunk_reuse_and_release():
     temp_dir = Path(tempfile.mkdtemp())
     client = _build_client(temp_dir)

@@ -157,85 +157,85 @@
 
 ### 5.1 Schema 定义
 
-- [ ] 新增“模型参数查询”请求/响应 Schema。
-- [ ] 新增“分段推理”请求/响应 Schema。
+- [x] 新增“模型参数查询”请求/响应 Schema。
+- [x] 新增“分段推理”请求/响应 Schema。
 - [ ] 校验字段：
-  - [ ] `task_id` 非空
-  - [ ] `model_path` 为绝对路径且非空
-  - [ ] `segment` 非空数组
-  - [ ] `segment[*]` 为对象（每项表示一行）
-  - [ ] `is_last_segment` 必填布尔
+  - [x] `task_id` 非空
+  - [x] `model_path` 为绝对路径且非空
+  - [x] `segment` 非空数组
+  - [x] `segment[*]` 为对象（每项表示一行）
+  - [x] `is_last_segment` 必填布尔
 
 ### 5.2 路由与接口
 
-- [ ] 新增 `GET /api/model/infer/config` 路由。
-- [ ] 新增 `POST /api/model/infer/chunk` 路由。
-- [ ] 接口统一返回 `code/message/data`。
+- [x] 新增 `GET /api/model/infer/config` 路由。
+- [x] 新增 `POST /api/model/infer/chunk` 路由。
+- [x] 接口统一返回 `code/message/data`。
 
 ### 5.3 模型元数据读取复用
 
-- [ ] 复用现有 metadata 读取工具（如 `model_metadata_service`）。
-- [ ] 从 metadata 提取 `prediction_length/context_length`。
-- [ ] 缺失字段时返回清晰错误。
+- [x] 复用现有 metadata 读取工具（如 `model_metadata_service`）。
+- [x] 从 metadata 提取 `prediction_length/context_length`。
+- [x] 缺失字段时返回清晰错误。
 
 ### 5.4 任务级模型缓存管理（重点）
 
-- [ ] 新增进程内缓存容器：`task_id -> {model_path, model_instance, last_access_at}`。
-- [ ] 新任务：加载模型并写入缓存。
-- [ ] 老任务：直接复用缓存模型。
+- [x] 新增进程内缓存容器：`task_id -> {model_path, model_instance, last_access_at}`。
+- [x] 新任务：加载模型并写入缓存。
+- [x] 老任务：直接复用缓存模型。
 - [ ] 防御性校验：
-  - [ ] 若相同 `task_id` 传入不同 `model_path`，返回冲突错误（建议 409）。
-- [ ] `is_last_segment=true` 时释放缓存：
-  - [ ] 删除缓存引用
+  - [x] 若相同 `task_id` 传入不同 `model_path`，返回冲突错误（建议 409）。
+- [x] `is_last_segment=true` 时释放缓存：
+  - [x] 删除缓存引用
   - [ ] 执行显存/内存清理（按框架支持）
-- [ ] 异常兜底：末段即使推理失败，也应尝试释放。
+- [x] 异常兜底：末段即使推理失败，也应尝试释放。
 
 ### 5.5 并发与线程安全
 
-- [ ] 为缓存操作加锁（至少写操作加锁）。
-- [ ] 避免同一 `task_id` 并发触发重复加载。
+- [x] 为缓存操作加锁（至少写操作加锁）。
+- [x] 避免同一 `task_id` 并发触发重复加载。
 - [ ] 明确服务多进程部署限制：
   - [ ] 若多 worker，每个 worker 缓存独立（文档说明）。
 
 ### 5.6 生命周期与泄漏防护
 
-- [ ] 增加可选 TTL 清理机制（防止前端漏传末段导致泄漏）。
-- [ ] 增加最大缓存任务数上限（防 OOM）。
-- [ ] 达到上限时给出清晰错误或淘汰策略（建议先报错，后续再LRU）。
+- [x] 增加可选 TTL 清理机制（防止前端漏传末段导致泄漏）。
+- [x] 增加最大缓存任务数上限（防 OOM）。
+- [x] 达到上限时给出清晰错误或淘汰策略（建议先报错，后续再LRU）。
 
 ### 5.7 分段数据校验与组装
 
-- [ ] 将 `segment` 转为 DataFrame（或当前推理输入结构）。
-- [ ] 校验 `segment` 中包含模型所需列（target/covariates）。
-- [ ] 非数值列返回清晰错误。
+- [x] 将 `segment` 转为 DataFrame（或当前推理输入结构）。
+- [x] 校验 `segment` 中包含模型所需列（target/covariates）。
+- [x] 非数值列返回清晰错误。
 
 ### 5.8 推理服务适配
 
-- [ ] 提取“单次分段推理”服务函数，供新接口调用。
-- [ ] 与现有 `/api/model/infer` 全量推理逻辑解耦，避免互相回归。
-- [ ] 返回结构对齐 `/api/model/infer`：`data.predictions[].target/prediction/actual`。
-- [ ] 分段接口可额外返回任务态字段：`task_id`、`model_reused`、`released`。
+- [x] 提取“单次分段推理”服务函数，供新接口调用。
+- [x] 与现有 `/api/model/infer` 全量推理逻辑解耦，避免互相回归。
+- [x] 返回结构对齐 `/api/model/infer`：`data.predictions[].target/prediction/actual`。
+- [x] 分段接口可额外返回任务态字段：`task_id`、`model_reused`、`released`。
 
 ### 5.9 观测与日志
 
 - [ ] 记录关键日志：
-  - [ ] `task_id` 首次加载
-  - [ ] `task_id` 复用命中
-  - [ ] `task_id` 末段释放
-  - [ ] 缓存当前大小
+  - [x] `task_id` 首次加载
+  - [x] `task_id` 复用命中
+  - [x] `task_id` 末段释放
+  - [x] 缓存当前大小
 - [ ] 增加异常日志，便于定位泄漏和并发问题。
 
 ---
 
 ## 6. 错误码与异常场景清单
 
-- [ ] `task_id` 缺失/为空 -> 400
-- [ ] `model_path` 非法或不存在 -> 404/400
-- [ ] metadata 缺失 `prediction_length/context_length` -> 400
-- [ ] 同一 `task_id` 切换 `model_path` -> 409
-- [ ] `segment` 非数组或为空 -> 400
-- [ ] `segment` 缺失所需列 -> 400
-- [ ] `segment` 列类型错误 -> 400
+- [x] `task_id` 缺失/为空 -> 400
+- [x] `model_path` 非法或不存在 -> 404/400
+- [x] metadata 缺失 `prediction_length/context_length` -> 400
+- [x] 同一 `task_id` 切换 `model_path` -> 409
+- [x] `segment` 非数组或为空 -> 400
+- [x] `segment` 缺失所需列 -> 400
+- [x] `segment` 列类型错误 -> 400
 - [ ] 模型加载失败 -> 500
 - [ ] 推理执行失败 -> 500
 
@@ -245,43 +245,43 @@
 
 ### 7.1 模型参数查询接口
 
-- [ ] 正常返回 `prediction_length/context_length`。
-- [ ] `model_path` 不存在时返回错误。
-- [ ] metadata 缺字段时报错。
+- [x] 正常返回 `prediction_length/context_length`。
+- [x] `model_path` 不存在时返回错误。
+- [x] metadata 缺字段时报错。
 
 ### 7.2 分段推理接口功能
 
-- [ ] 首段请求触发模型加载。
-- [ ] 非首段同 `task_id` 复用模型（不重复加载）。
-- [ ] 末段请求完成后释放缓存。
-- [ ] 末段后再次同 `task_id` 请求应重新加载。
+- [x] 首段请求触发模型加载。
+- [x] 非首段同 `task_id` 复用模型（不重复加载）。
+- [x] 末段请求完成后释放缓存。
+- [x] 末段后再次同 `task_id` 请求应重新加载。
 
 ### 7.3 一致性与防错
 
-- [ ] 同 `task_id` + 不同 `model_path` 返回冲突。
+- [x] 同 `task_id` + 不同 `model_path` 返回冲突。
 - [ ] 推理异常时，若 `is_last_segment=true` 仍释放缓存。
 - [ ] 高并发下同 `task_id` 不重复加载（或重复加载次数可控并有保护）。
 
 ### 7.4 分段数据格式
 
-- [ ] `segment` 为行对象数组时可正常推理。
-- [ ] `segment` 行中缺列时返回 400。
-- [ ] `segment` 行中出现非数值特征列时报错。
+- [x] `segment` 为行对象数组时可正常推理。
+- [x] `segment` 行中缺列时返回 400。
+- [x] `segment` 行中出现非数值特征列时报错。
 - [ ] `segment` 含 `time` 列时排序逻辑正确。
 
 ### 7.5 泄漏防护
 
-- [ ] 未发送末段时 TTL 能自动回收。
-- [ ] 缓存上限触发行为符合预期。
+- [x] 未发送末段时 TTL 能自动回收。
+- [x] 缓存上限触发行为符合预期。
 
 ---
 
 ## 8. 实施顺序建议
 
 1. [ ] 定义新接口 Schema 与路由。
-2. [ ] 完成 metadata 查询接口。
-3. [ ] 实现 `task_id` 缓存管理器（含加锁、加载、释放）。
-4. [ ] 接入分段推理主流程。
+2. [x] 完成 metadata 查询接口。
+3. [x] 实现 `task_id` 缓存管理器（含加锁、加载、释放）。
+4. [x] 接入分段推理主流程。
 5. [ ] 补齐错误码和日志。
 6. [ ] 编写单元测试与集成测试。
 7. [ ] 更新 `README.md` 与 `docs/frontend-api.md`。
@@ -294,4 +294,3 @@
 - [ ] 前端必须在最后一段设置 `is_last_segment=true`。
 - [ ] 若前端中断，后端依赖 TTL 回收。
 - [ ] `segment` 已确认采用“行对象数组”（每个对象=CSV一行）。
-
