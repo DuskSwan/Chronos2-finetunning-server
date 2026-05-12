@@ -4,6 +4,7 @@
 
 from typing import Optional
 import re
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -301,7 +302,10 @@ class ModelInferConfigRequest(BaseModel):
     def validate_model_path(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("model_path is required")
-        return v.strip()
+        cleaned = v.strip()
+        if not Path(cleaned).is_absolute():
+            raise ValueError("model_path must be an absolute path")
+        return cleaned
 
 
 class ModelInferChunkRequest(BaseModel):
@@ -318,6 +322,13 @@ class ModelInferChunkRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("field is required")
         return v.strip()
+
+    @field_validator("model_path")
+    @classmethod
+    def validate_model_path_absolute(cls, v: str) -> str:
+        if not Path(v).is_absolute():
+            raise ValueError("model_path must be an absolute path")
+        return v
 
     @field_validator("segment")
     @classmethod

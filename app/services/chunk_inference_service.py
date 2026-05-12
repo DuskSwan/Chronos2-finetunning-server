@@ -134,6 +134,12 @@ def release_task_models(task_id: str) -> None:
             logger.info("chunk infer cache released: task_id={}, cache_size={}", task_id, len(_TASK_CACHE))
 
 
+def _clear_task_cache_for_test() -> None:
+    """测试辅助：清空缓存。"""
+    with _TASK_CACHE_LOCK:
+        _TASK_CACHE.clear()
+
+
 def run_chunk_inference(
     task_id: str,
     model_path: str,

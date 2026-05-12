@@ -13,6 +13,7 @@ from app.core.config import Settings
 from app.db.models import Base
 from app.db.session import get_db
 from app.main import create_app
+from app.services.chunk_inference_service import _clear_task_cache_for_test
 
 
 def _auth_header() -> dict[str, str]:
@@ -74,17 +75,22 @@ def _build_client(temp_dir: Path) -> TestClient:
     def get_test_db():
         yield db
 
-    with patch("app.main.get_settings", return_value=test_settings):
-        with patch("app.core.auth.get_settings", return_value=test_settings):
-            with patch("app.services.chunk_inference_service.get_settings", return_value=test_settings):
-                with patch("app.main.initialize_worker", lambda *_args, **_kwargs: None):
-                    app = create_app()
-                    app.dependency_overrides[get_db] = get_test_db
-                    client = TestClient(app)
-                    client.__enter__()
-                    client._test_db = db  # type: ignore[attr-defined]
-                    client._test_engine = engine  # type: ignore[attr-defined]
-                    return client
+    patchers = [
+        patch("app.main.get_settings", return_value=test_settings),
+        patch("app.core.auth.get_settings", return_value=test_settings),
+        patch("app.services.chunk_inference_service.get_settings", return_value=test_settings),
+        patch("app.main.initialize_worker", lambda *_args, **_kwargs: None),
+    ]
+    for patcher in patchers:
+        patcher.start()
+    app = create_app()
+    app.dependency_overrides[get_db] = get_test_db
+    client = TestClient(app)
+    client.__enter__()
+    client._test_db = db  # type: ignore[attr-defined]
+    client._test_engine = engine  # type: ignore[attr-defined]
+    client._test_patchers = patchers  # type: ignore[attr-defined]
+    return client
 
 
 def _close_client(client: TestClient) -> None:
@@ -95,6 +101,10 @@ def _close_client(client: TestClient) -> None:
         db.close()
     if engine is not None:
         engine.dispose()
+    patchers = getattr(client, "_test_patchers", [])
+    for patcher in reversed(patchers):
+        patcher.stop()
+    _clear_task_cache_for_test()
 
 
 def _build_model_root(temp_dir: Path, name: str) -> Path:
@@ -236,4 +246,172 @@ def test_infer_chunk_task_id_conflict_model_path():
             assert body["message"] == "task_id conflicts with another model_path"
     finally:
         _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_chunk_requires_absolute_model_path():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        response = client.post(
+            "/api/model/infer/chunk",
+            headers=_auth_header(),
+            json={
+                "task_id": "task-rel",
+                "model_path": "relative/model/path",
+                "is_last_segment": False,
+                "segment": _segment_payload(),
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["code"] == 500
+        assert "model_path must be an absolute path" in body["message"]
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_chunk_cache_capacity_limit():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        model_root_a = _build_model_root(temp_dir, "job_cap_a")
+        model_root_b = _build_model_root(temp_dir, "job_cap_b")
+        model_root_c = _build_model_root(temp_dir, "job_cap_c")
+        with patch("app.services.chunk_inference_service.load_local_model", return_value=_FakePipeline([0.1, 0.2])):
+            resp_a = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-cap-a",
+                    "model_path": str(model_root_a.resolve()),
+                    "is_last_segment": False,
+                    "segment": _segment_payload(),
+                },
+            )
+            assert resp_a.status_code == 200
+            assert resp_a.json()["code"] == 0
+
+            resp_b = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-cap-b",
+                    "model_path": str(model_root_b.resolve()),
+                    "is_last_segment": False,
+                    "segment": _segment_payload(),
+                },
+            )
+            assert resp_b.status_code == 200
+            assert resp_b.json()["code"] == 0
+
+            resp_c = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-cap-c",
+                    "model_path": str(model_root_c.resolve()),
+                    "is_last_segment": False,
+                    "segment": _segment_payload(),
+                },
+            )
+            assert resp_c.status_code == 200
+            body_c = resp_c.json()
+            assert body_c["code"] == 500
+            assert body_c["message"] == "chunk inference cache is full"
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_chunk_cache_ttl_eviction():
+    temp_dir = Path(tempfile.mkdtemp())
+    try:
+        artifacts_dir = temp_dir / "artifacts"
+        logs_dir = temp_dir / "logs"
+        release_dir = temp_dir / "release"
+        db_path = temp_dir / "test.db"
+        artifacts_dir.mkdir(exist_ok=True)
+        logs_dir.mkdir(exist_ok=True)
+        release_dir.mkdir(exist_ok=True)
+
+        ttl_settings = Settings(
+            host="127.0.0.1",
+            port=8000,
+            sqlite_db_path=str(db_path),
+            artifacts_root=str(artifacts_dir),
+            logs_root=str(logs_dir),
+            release_path=str(release_dir),
+            api_bearer_token="spec-token",
+            chunk_infer_cache_ttl_seconds=1,
+            chunk_infer_cache_max_tasks=2,
+        )
+
+        engine = create_engine(f"sqlite:///{db_path.as_posix()}", connect_args={"check_same_thread": False})
+        Base.metadata.create_all(bind=engine)
+        SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        db = SessionLocal()
+
+        def get_test_db():
+            yield db
+
+        with patch("app.main.get_settings", return_value=ttl_settings):
+            with patch("app.core.auth.get_settings", return_value=ttl_settings):
+                with patch("app.services.chunk_inference_service.get_settings", return_value=ttl_settings):
+                    with patch("app.main.initialize_worker", lambda *_args, **_kwargs: None):
+                        app = create_app()
+                        app.dependency_overrides[get_db] = get_test_db
+                        with TestClient(app) as client:
+                            model_root_a = _build_model_root(temp_dir, "job_ttl_a")
+                            model_root_b = _build_model_root(temp_dir, "job_ttl_b")
+                            model_root_c = _build_model_root(temp_dir, "job_ttl_c")
+
+                            with patch("app.services.chunk_inference_service.load_local_model", return_value=_FakePipeline([0.1, 0.2])):
+                                resp_a = client.post(
+                                    "/api/model/infer/chunk",
+                                    headers=_auth_header(),
+                                    json={
+                                        "task_id": "task-ttl-a",
+                                        "model_path": str(model_root_a.resolve()),
+                                        "is_last_segment": False,
+                                        "segment": _segment_payload(),
+                                    },
+                                )
+                                assert resp_a.status_code == 200
+                                assert resp_a.json()["code"] == 0
+
+                                import time as _time
+
+                                _time.sleep(1.2)
+
+                                resp_b = client.post(
+                                    "/api/model/infer/chunk",
+                                    headers=_auth_header(),
+                                    json={
+                                        "task_id": "task-ttl-b",
+                                        "model_path": str(model_root_b.resolve()),
+                                        "is_last_segment": False,
+                                        "segment": _segment_payload(),
+                                    },
+                                )
+                                assert resp_b.status_code == 200
+                                assert resp_b.json()["code"] == 0
+
+                                resp_c = client.post(
+                                    "/api/model/infer/chunk",
+                                    headers=_auth_header(),
+                                    json={
+                                        "task_id": "task-ttl-c",
+                                        "model_path": str(model_root_c.resolve()),
+                                        "is_last_segment": False,
+                                        "segment": _segment_payload(),
+                                    },
+                                )
+                                assert resp_c.status_code == 200
+                                assert resp_c.json()["code"] == 0
+        db.close()
+        engine.dispose()
+        _clear_task_cache_for_test()
+    finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
