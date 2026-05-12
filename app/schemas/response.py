@@ -160,3 +160,36 @@ class ModelInfoResponse(BaseModel):
     code: int = Field(description="业务状态码")
     message: str = Field(description="结果描述")
     data: ModelInfoData | None = Field(description="响应数据")
+
+
+class ModelInferConfigData(BaseModel):
+    """模型推理配置接口 data。"""
+
+    model_path: str = Field(description="模型目录绝对路径")
+    prediction_length: int = Field(description="默认预测长度")
+    context_length: int = Field(description="默认上下文长度")
+
+
+class ModelInferConfigResponse(BaseModel):
+    """模型推理配置接口响应。"""
+
+    code: int = Field(description="业务状态码")
+    message: str = Field(description="结果描述")
+    data: ModelInferConfigData | None = Field(description="响应数据")
+
+
+class ModelInferChunkData(BaseModel):
+    """模型分段推理接口 data。"""
+
+    task_id: str = Field(description="本次分段推理任务 ID")
+    predictions: list[InferPredictionItem] = Field(description="预测结果，结构与 /api/model/infer 一致")
+    model_reused: bool = Field(description="是否复用已缓存模型")
+    released: bool = Field(description="本次请求后是否释放缓存模型")
+
+
+class ModelInferChunkResponse(BaseModel):
+    """模型分段推理接口响应。"""
+
+    code: int = Field(description="业务状态码")
+    message: str = Field(description="结果描述")
+    data: ModelInferChunkData | None = Field(description="响应数据")

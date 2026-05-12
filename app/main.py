@@ -34,7 +34,7 @@ def _is_model_publish_route(request: Request) -> bool:
     return request.url.path == "/api/model/publish"
 
 def _is_model_infer_route(request: Request) -> bool:
-    return request.url.path == "/api/model/infer"
+    return request.url.path in {"/api/model/infer", "/api/model/infer/config", "/api/model/infer/chunk"}
 
 def _is_model_info_route(request: Request) -> bool:
     return request.url.path == "/api/model/info"

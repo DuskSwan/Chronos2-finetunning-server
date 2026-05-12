@@ -289,3 +289,44 @@ class ModelInferRequest(BaseModel):
         if len(set(targets)) != len(targets):
             raise ValueError("cov_group.target cannot contain duplicates")
         return v
+
+
+class ModelInferConfigRequest(BaseModel):
+    """模型推理配置查询请求。"""
+
+    model_path: str = Field(description="发布后的模型绝对路径")
+
+    @field_validator("model_path")
+    @classmethod
+    def validate_model_path(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("model_path is required")
+        return v.strip()
+
+
+class ModelInferChunkRequest(BaseModel):
+    """模型分段推理请求。"""
+
+    task_id: str = Field(description="本次分段推理任务 ID")
+    model_path: str = Field(description="发布后的模型绝对路径")
+    is_last_segment: bool = Field(description="是否最后一段")
+    segment: list[dict[str, object]] = Field(description="行对象数组，每个对象对应 CSV 一行")
+
+    @field_validator("task_id", "model_path")
+    @classmethod
+    def validate_required_text(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("field is required")
+        return v.strip()
+
+    @field_validator("segment")
+    @classmethod
+    def validate_segment(cls, v: list[dict[str, object]]) -> list[dict[str, object]]:
+        if not isinstance(v, list) or not v:
+            raise ValueError("segment must be a non-empty array")
+        for item in v:
+            if not isinstance(item, dict):
+                raise ValueError("segment items must be objects")
+            if not item:
+                raise ValueError("segment items cannot be empty objects")
+        return v
