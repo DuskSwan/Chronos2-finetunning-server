@@ -91,9 +91,15 @@ def _load_task_entry(task_id: str, model_path: str) -> _TaskCacheEntry:
     )
 
     pipelines: dict[str, Any] = {}
-    for group in cov_group:
-        target_model_dir = _resolve_target_model_dir(model_dir, group, metadata_model_dir_map)
-        pipelines[group.target] = load_local_model(target_model_dir, device="cpu")
+    try:
+        for group in cov_group:
+            target_model_dir = _resolve_target_model_dir(model_dir, group, metadata_model_dir_map)
+            pipelines[group.target] = load_local_model(target_model_dir, device="cpu")
+    except InferenceError:
+        raise
+    except Exception as exc:
+        logger.exception("chunk infer model load failed: task_id={}, model_path={}", task_id, model_path)
+        raise InferenceError(500, "model loading failed") from exc
 
     return _TaskCacheEntry(
         model_path=model_path,
@@ -169,26 +175,36 @@ def run_chunk_inference(
             cov_values = {col: df[col].to_numpy(copy=True) for col in group.covariates}
 
             merged_prediction: list[float] = []
-            start_idx = 0
-            while len(merged_prediction) < expected_pred_len:
-                end_idx = start_idx + entry.context_length
-                input_dict: dict[str, Any] = {"target": target_values[start_idx:end_idx]}
-                if cov_values:
-                    input_dict["past_covariates"] = {
-                        col: values[start_idx:end_idx] for col, values in cov_values.items()
-                    }
-                raw_outputs = entry.pipelines[group.target].predict(
-                    inputs=[input_dict],
-                    prediction_length=entry.prediction_length,
+            try:
+                start_idx = 0
+                while len(merged_prediction) < expected_pred_len:
+                    end_idx = start_idx + entry.context_length
+                    input_dict: dict[str, Any] = {"target": target_values[start_idx:end_idx]}
+                    if cov_values:
+                        input_dict["past_covariates"] = {
+                            col: values[start_idx:end_idx] for col, values in cov_values.items()
+                        }
+                    raw_outputs = entry.pipelines[group.target].predict(
+                        inputs=[input_dict],
+                        prediction_length=entry.prediction_length,
+                    )
+                    if not raw_outputs:
+                        raise InferenceError(500, f"empty prediction for target '{group.target}'")
+                    chunk_prediction = _to_float_list(raw_outputs[0])
+                    if not chunk_prediction:
+                        raise InferenceError(500, f"empty prediction for target '{group.target}'")
+                    remaining = expected_pred_len - len(merged_prediction)
+                    merged_prediction.extend(chunk_prediction[:remaining])
+                    start_idx += entry.prediction_length
+            except InferenceError:
+                raise
+            except Exception as exc:
+                logger.exception(
+                    "chunk infer prediction failed: task_id={}, target={}",
+                    task_id,
+                    group.target,
                 )
-                if not raw_outputs:
-                    raise InferenceError(500, f"empty prediction for target '{group.target}'")
-                chunk_prediction = _to_float_list(raw_outputs[0])
-                if not chunk_prediction:
-                    raise InferenceError(500, f"empty prediction for target '{group.target}'")
-                remaining = expected_pred_len - len(merged_prediction)
-                merged_prediction.extend(chunk_prediction[:remaining])
-                start_idx += entry.prediction_length
+                raise InferenceError(500, f"inference failed for target '{group.target}'") from exc
 
             predictions.append(
                 InferPredictionItem(

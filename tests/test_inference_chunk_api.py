@@ -477,3 +477,113 @@ def test_infer_chunk_cache_ttl_eviction():
         _clear_task_cache_for_test()
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_chunk_inference_error_releases_on_last_segment():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        model_root = _build_model_root(temp_dir, "job_err_release")
+        with patch("app.services.chunk_inference_service.load_local_model", return_value=_FakePipeline([0.1, 0.2])) as mocked:
+            first = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-err-release",
+                    "model_path": str(model_root.resolve()),
+                    "is_last_segment": False,
+                    "segment": _segment_payload(),
+                },
+            )
+            assert first.status_code == 200
+            assert first.json()["code"] == 0
+            assert mocked.call_count == 1
+
+            bad = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-err-release",
+                    "model_path": str(model_root.resolve()),
+                    "is_last_segment": True,
+                    "segment": [{"time": 1, "value1": 1.0}],
+                },
+            )
+            assert bad.status_code == 200
+            bad_body = bad.json()
+            assert bad_body["code"] == 400
+            assert "missing column which model required: value2" in bad_body["message"]
+
+            again = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-err-release",
+                    "model_path": str(model_root.resolve()),
+                    "is_last_segment": False,
+                    "segment": _segment_payload(),
+                },
+            )
+            assert again.status_code == 200
+            assert again.json()["code"] == 0
+            assert mocked.call_count == 2
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_chunk_model_loading_failed_returns_500():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        model_root = _build_model_root(temp_dir, "job_load_fail")
+        with patch("app.services.chunk_inference_service.load_local_model", side_effect=RuntimeError("boom")):
+            resp = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-load-fail",
+                    "model_path": str(model_root.resolve()),
+                    "is_last_segment": False,
+                    "segment": _segment_payload(),
+                },
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["code"] == 500
+            assert body["message"] == "model loading failed"
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_infer_chunk_prediction_failed_returns_500():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        model_root = _build_model_root(temp_dir, "job_pred_fail")
+
+        class _BadPipeline:
+            def predict(self, inputs, prediction_length):
+                _ = inputs
+                _ = prediction_length
+                raise RuntimeError("predict crash")
+
+        with patch("app.services.chunk_inference_service.load_local_model", return_value=_BadPipeline()):
+            resp = client.post(
+                "/api/model/infer/chunk",
+                headers=_auth_header(),
+                json={
+                    "task_id": "task-pred-fail",
+                    "model_path": str(model_root.resolve()),
+                    "is_last_segment": False,
+                    "segment": _segment_payload(),
+                },
+            )
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["code"] == 500
+            assert body["message"] == "inference failed for target 'value1'"
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
