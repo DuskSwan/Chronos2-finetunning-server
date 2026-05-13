@@ -15,6 +15,7 @@
 - 真实 Chronos-2 微调（`fit()`）与训练进度跟踪
 - 任务查询、日志查询、协作式取消、任务删除
 - 模型发布与兼容接口（`/api/v1/train_jobs*`, `/api/model/*`）
+- 分段推理接口（`/api/model/infer/config`, `/api/model/infer/chunk`，支持按 `task_id` 复用模型）
 - 边端离线推理 CLI 与 ExternalNode(ZMQ REQ) 长驻进程
 
 ## 文档导航
@@ -82,6 +83,8 @@ API_BEARER_TOKEN=
 DEVICE=cpu
 LOGGING_STEPS=100
 FINETUNED_CKPT_NAME=finetuned-ckpt
+CHUNK_INFER_CACHE_TTL_SECONDS=1800
+CHUNK_INFER_CACHE_MAX_TASKS=128
 ```
 
 ## 测试

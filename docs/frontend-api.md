@@ -176,6 +176,90 @@
 - `data.predictions[].prediction`
 - `data.predictions[].actual`
 
+### GET /api/model/infer/config
+
+用途：查询模型默认推理参数（来自 `metadata.json`）
+
+查询参数：
+
+- `model_path` (str, 必需，绝对路径)
+
+成功响应示例：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "model_path": "/abs/path/to/release/models/user_10001/v1.0.0/train_job_20260121103000",
+    "prediction_length": 96,
+    "context_length": 512
+  }
+}
+```
+
+常见错误：
+
+- `code=404, message="model path not found"`
+- `code=404, message="metadata.json not found"`
+- `code=400, message="metadata.json missing required field: ..."`
+
+### POST /api/model/infer/chunk
+
+用途：分段推理（按 `task_id` 复用模型，末段释放）
+
+请求体：
+
+| 字段 | 类型 | 必需 | 说明 |
+| ---- | ---- | ---- | ---- |
+| task_id | str | 是 | 分段推理任务 ID |
+| model_path | str | 是 | 发布模型绝对路径 |
+| is_last_segment | bool | 是 | 是否最后一段 |
+| segment | list[object] | 是 | 行对象数组，每个对象表示 CSV 一行 |
+
+请求示例：
+
+```json
+{
+  "task_id": "infer_task_20260512_001",
+  "model_path": "/abs/path/to/release/models/user_10001/v1.0.0/train_job_20260121103000",
+  "is_last_segment": false,
+  "segment": [
+    {"time": 47, "value1": 0.0121, "value2": 0.0173, "value3": 0.0113, "value4": 0.0265},
+    {"time": 48, "value1": 0.0579, "value2": 0.0140, "value3": 0.0338, "value4": 0.0302},
+    {"time": 49, "value1": 0.0610, "value2": 0.0140, "value3": 0.0340, "value4": 0.0310},
+    {"time": 50, "value1": 0.0620, "value2": 0.0150, "value3": 0.0350, "value4": 0.0320}
+  ]
+}
+```
+
+成功响应示例：
+
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "task_id": "infer_task_20260512_001",
+    "predictions": [
+      {
+        "target": "value1",
+        "prediction": [0.1, 0.2],
+        "actual": [0.061, 0.062]
+      }
+    ],
+    "model_reused": false,
+    "released": false
+  }
+}
+```
+
+说明：
+
+- `data.predictions` 与 `/api/model/infer` 的结构一致。
+- 同一 `task_id` 重复调用会复用缓存模型；当 `is_last_segment=true` 时释放缓存。
+- 若同一 `task_id` 携带不同 `model_path`，返回 `code=409`。
+
 ### GET /api/model/info
 
 用途：查询发布模型元数据（targets、selected_groups、prediction/context length）
