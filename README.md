@@ -33,11 +33,7 @@
 ### 2. 安装依赖
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .
-# 开发依赖
-pip install -e ".[dev]"
+uv pip install -r requirements.txt
 ```
 
 ### 3. 启动服务
