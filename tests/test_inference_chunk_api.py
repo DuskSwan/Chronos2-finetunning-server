@@ -2,7 +2,9 @@
 
 import shutil
 import tempfile
+import threading
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, wait
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -13,7 +15,7 @@ from app.core.config import Settings
 from app.db.models import Base
 from app.db.session import get_db
 from app.main import create_app
-from app.services.chunk_inference_service import _clear_task_cache_for_test
+from app.services.chunk_inference_service import _clear_task_cache_for_test, run_chunk_inference
 
 
 def _auth_header() -> dict[str, str]:
@@ -584,6 +586,52 @@ def test_infer_chunk_prediction_failed_returns_500():
             body = resp.json()
             assert body["code"] == 500
             assert body["message"] == "inference failed for target 'value1'"
+    finally:
+        _close_client(client)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def test_chunk_service_concurrent_same_task_id_load_once():
+    temp_dir = Path(tempfile.mkdtemp())
+    client = _build_client(temp_dir)
+    try:
+        model_root = _build_model_root(temp_dir, "job_concurrent")
+        start_barrier = threading.Barrier(6)
+        call_counter = {"count": 0}
+        counter_lock = threading.Lock()
+
+        def slow_loader(_path, device="cpu"):
+            _ = device
+            with counter_lock:
+                call_counter["count"] += 1
+            import time as _time
+
+            _time.sleep(0.2)
+            return _FakePipeline([0.1, 0.2])
+
+        def invoke_once():
+            start_barrier.wait()
+            preds, reused = run_chunk_inference(
+                task_id="task-concurrent-1",
+                model_path=str(model_root.resolve()),
+                segment=_segment_payload(),
+                is_last_segment=False,
+            )
+            assert preds
+            return reused
+
+        with patch("app.services.chunk_inference_service.load_local_model", side_effect=slow_loader):
+            futures = []
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                for _ in range(6):
+                    futures.append(executor.submit(invoke_once))
+                done, not_done = wait(futures, timeout=10)
+                assert not not_done
+                reused_flags = [f.result() for f in done]
+
+        assert call_counter["count"] == 1
+        assert reused_flags.count(False) == 1
+        assert reused_flags.count(True) == 5
     finally:
         _close_client(client)
         shutil.rmtree(temp_dir, ignore_errors=True)
